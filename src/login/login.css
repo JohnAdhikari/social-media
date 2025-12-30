@@ -1,0 +1,122 @@
+/* --- 1. THE FIX: Universal Reset --- */
+* {
+  box-sizing: border-box; /* Ensures padding doesn't increase width */
+  margin: 0;
+  padding: 0;
+}
+
+/* Ensure html/body take full height and have no white background */
+html, body {
+  height: 100%;
+  width: 100%;
+  background-color: hsl(0, 0%, 2%); /* Match your container color */
+  overflow-x: hidden; /* Prevents accidental horizontal scrolling */
+}
+
+/* --- Your Existing Styles (Updated) --- */
+
+.login-container {
+  background-color: hsl(0, 0%, 2%);
+  color: white;
+  min-height: 100vh; /* Use min-height instead of height for safety */
+  font-family: Arial, Helvetica, sans-serif;
+  
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  justify-items: center;
+  
+  /* Removed height: 100vh here (handled by min-height) */
+  padding: 0 40px;
+  gap: 20px;
+}
+
+.image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+}
+
+.img-logo {
+  height: 120px;
+  width: 120px;
+  object-fit: contain; /* Prevents image distortion */
+}
+
+.img-text {
+  height: 200px;
+  width: 200px;
+  object-fit: contain;
+}
+
+.login-page {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 30px 40px;
+  width: 320px; /* Fixed width */
+  display: flex;
+  justify-content: center;
+  box-shadow: 0px 0px 15px rgba(255, 255, 255, 0.15);
+}
+
+.login-page form {
+  width: 100%;
+}
+
+.input {
+  border: none;
+  background-color: rgba(255, 255, 255, 0.1);
+  outline: none;
+  box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.2);
+  margin-bottom: 15px;
+  padding: 12px;
+  border-radius: 6px;
+  
+  width: 100%; /* Now safe because of box-sizing: border-box at top */
+  
+  font-size: 1rem;
+  color: white;
+}
+
+.login-btn {
+  border: none;
+  background: linear-gradient(135deg, #00c896, #008cff);
+  width: 100%;
+  color: white;
+  cursor: pointer;
+  height: 45px;
+  font-size: 1.3rem;
+  border-radius: 6px;
+  font-weight: bold;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  transition: 0.2s ease;
+  
+  /* Centering text */
+  display: flex; 
+  align-items: center;
+  justify-content: center;
+  text-decoration: none; /* Removes link underline */
+}
+
+.login-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0px 0px 10px #00c896;
+}
+
+.message {
+  margin-top: 15px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.create {
+  color: #00c8ff;
+  text-decoration: underline;
+}
+
+.create:hover {
+  color: #64d4ff;
+}

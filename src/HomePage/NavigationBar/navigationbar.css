@@ -1,0 +1,59 @@
+.navigation-search-bar {
+    height: 60px;
+    padding: 0 20px;
+    background: rgb(255, 255, 255);
+    display: flex;
+    align-items: center;
+}
+
+.navigation-logo-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.navigation-logo-icon {
+    height: 50px;
+    width: 50px;
+}
+
+.navigation-logo-wrapper:hover {
+    opacity: 0.8;
+}
+
+.navigation-username {
+  font-size: 16px;
+  font-weight: 500;
+  color: #000000;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+
+.navigation-user{
+    text-decoration: none;
+    color: #007bff;
+    font-size: 17px;
+    font-weight: 510;
+}
+
+.logout-btn {
+  display: flex;
+  margin-left: auto;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 5px;
+  background: #ff4d4d;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.logout-btn:hover {
+  background: #e63939;
+}

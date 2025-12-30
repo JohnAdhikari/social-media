@@ -1,0 +1,94 @@
+
+body {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.homepage-container {
+  background-color: hsl(198, 38%, 95%); 
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.homepage-nav-bar-container {
+  grid-area: nav;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: 60px;
+  width: 100%;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.homepage-content-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr; 
+  grid-template-areas: 
+    "aboutme main contacts";
+  gap: 20px;
+  padding: 20px;
+  max-width: 1400px; 
+  margin: 0 auto;
+  width: 100%;
+}
+
+
+
+.homepage-left-sidebar {
+  grid-area: aboutme;
+  top: 80px; 
+  position: sticky;
+  height: fit-content;
+  height: 100vh;
+  width: 100%;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  min-height: 300px;
+}
+
+.homepage-main-feed {
+  grid-area: main;
+  min-height: 500px; 
+}
+
+.homepage-right-sidebar {
+  display: none;
+  grid-area: contacts;
+  position: sticky;
+  top: 80px;
+  height: fit-content;
+  height: 100vh;
+  width: 100%;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  min-height: 300px;
+}
+
+
+@media (max-width: 900px) {
+  .content-grid {
+    grid-template-columns: 1fr 2fr; 
+  }
+  .right-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .homepage-content-grid {
+    grid-template-columns: 1fr;
+  }
+  .homepage-left-sidebar, .homepage-right-sidebar {
+    display: none;
+  }
+}
+
+.cc{
+  color: white;
+  text-align: center;
+  font-family: serif;
+  font-size: 1rem;
+  height: clamp(2rem, 5vw, 3rem);
+}

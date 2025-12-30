@@ -1,0 +1,25 @@
+.aboutme-info,.aboutme-ai{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+}
+.aboutme-image{
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+.aboutme-name{
+    font-size: 18px;
+    font-family: Arial, Helvetica, sans-serif;
+}
+.aboutme-ai-text{
+    font-size: 18px;
+    font-family: Arial, Helvetica, sans-serif;
+    cursor: pointer;
+}
+.aboutme-ai:hover{
+    background-color: #f0f2f5;
+}
