@@ -1,122 +1,244 @@
-/* --- 1. THE FIX: Universal Reset --- */
-* {
-  box-sizing: border-box; /* Ensures padding doesn't increase width */
-  margin: 0;
-  padding: 0;
-}
-
-/* Ensure html/body take full height and have no white background */
-html, body {
-  height: 100%;
-  width: 100%;
-  background-color: hsl(0, 0%, 2%); /* Match your container color */
-  overflow-x: hidden; /* Prevents accidental horizontal scrolling */
-}
-
-/* --- Your Existing Styles (Updated) --- */
-
 .login-container {
-  background-color: hsl(0, 0%, 2%);
-  color: white;
-  min-height: 100vh; /* Use min-height instead of height for safety */
-  font-family: Arial, Helvetica, sans-serif;
-  
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-backdrop-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.glow-1 {
+  width: 350px;
+  height: 350px;
+  background: var(--accent-primary);
+  top: 10%;
+  left: 15%;
+}
+
+.glow-2 {
+  width: 400px;
+  height: 400px;
+  background: var(--accent-pink);
+  bottom: 10%;
+  right: 15%;
+}
+
+.login-content-wrapper {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: center;
-  justify-items: center;
-  
-  /* Removed height: 100vh here (handled by min-height) */
-  padding: 0 40px;
-  gap: 20px;
+  width: 100%;
+  max-width: 960px;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
 }
 
-.image {
+.login-brand-section {
+  padding: 48px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(236, 72, 153, 0.1) 100%);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 15px;
+  justify-content: center;
+  border-right: 1px solid var(--border-glass);
+}
+
+.logo-badge {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .img-logo {
-  height: 120px;
-  width: 120px;
-  object-fit: contain; /* Prevents image distortion */
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 15px rgba(99, 102, 241, 0.5));
 }
 
 .img-text {
-  height: 200px;
-  width: 200px;
+  height: 36px;
+  width: auto;
   object-fit: contain;
+  object-position: left;
 }
 
-.login-page {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 30px 40px;
-  width: 320px; /* Fixed width */
+.brand-tagline {
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.login-form-section {
+  padding: 48px;
   display: flex;
+  flex-direction: column;
   justify-content: center;
-  box-shadow: 0px 0px 15px rgba(255, 255, 255, 0.15);
 }
 
-.login-page form {
-  width: 100%;
+.form-header {
+  margin-bottom: 28px;
+}
+
+.form-header h2 {
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.form-header p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.login-error-alert {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  margin-bottom: 20px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .input {
-  border: none;
-  background-color: rgba(255, 255, 255, 0.1);
-  outline: none;
-  box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.2);
-  margin-bottom: 15px;
-  padding: 12px;
-  border-radius: 6px;
-  
-  width: 100%; /* Now safe because of box-sizing: border-box at top */
-  
-  font-size: 1rem;
-  color: white;
+  width: 100%;
+  padding: 12px 16px;
+  font-size: 0.95rem;
+}
+
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-password {
+  position: absolute;
+  right: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.toggle-password:hover {
+  color: var(--text-main);
 }
 
 .login-btn {
-  border: none;
-  background: linear-gradient(135deg, #00c896, #008cff);
   width: 100%;
-  color: white;
-  cursor: pointer;
-  height: 45px;
-  font-size: 1.3rem;
-  border-radius: 6px;
-  font-weight: bold;
-  margin-top: 10px;
-  margin-bottom: 10px;
-  transition: 0.2s ease;
-  
-  /* Centering text */
-  display: flex; 
+  padding: 14px;
+  font-size: 1rem;
+  margin-top: 8px;
+}
+
+.demo-login-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.demo-login-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.divider {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  text-decoration: none; /* Removes link underline */
+  text-align: center;
+  margin: 24px 0 16px;
+  color: var(--text-subtle);
+  font-size: 0.8rem;
 }
 
-.login-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0px 0px 10px #00c896;
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-glass);
 }
 
-.message {
-  margin-top: 15px;
+.divider span {
+  padding: 0 12px;
+}
+
+.signup-prompt {
   text-align: center;
   font-size: 0.9rem;
+  color: var(--text-muted);
 }
 
-.create {
-  color: #00c8ff;
+.create-link {
+  color: var(--accent-cyan);
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.create-link:hover {
+  color: #67e8f9;
   text-decoration: underline;
 }
 
-.create:hover {
-  color: #64d4ff;
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .login-content-wrapper {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+  }
+
+  .login-brand-section {
+    padding: 32px 24px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-glass);
+    align-items: center;
+    text-align: center;
+  }
+
+  .logo-badge {
+    align-items: center;
+  }
+
+  .login-form-section {
+    padding: 32px 24px;
+  }
 }

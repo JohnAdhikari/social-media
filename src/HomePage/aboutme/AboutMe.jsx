@@ -1,22 +1,89 @@
+import { useState } from "react";
 import "./aboutme.css";
-import logoText from "../../assets/text.png";
-import logo from "../../assets/logo.png";
 import pfp from "../../assets/pfp.png";
-import { Link } from "react-router-dom";
 import ai from "../../assets/ai.png";
 
 function AboutMe() {
-  const username = localStorage.getItem("username") || "Guest";
+  const username = localStorage.getItem("username") || "John Adhikari";
+  const [bio, setBio] = useState(() => localStorage.getItem("zone_user_bio") || "Full-stack developer & AI enthusiast building future web apps.");
+  const [isEditing, setIsEditing] = useState(false);
+
+  function handleSaveBio() {
+    localStorage.setItem("zone_user_bio", bio);
+    setIsEditing(false);
+  }
 
   return (
-    <div className="aboutme">
-      <div className="aboutme-info">
-        <img src={pfp} className="aboutme-image" alt="Logo" />
-        <h2 className="aboutme-name">{username}</h2>
-      </div>
-      <div className="aboutme-ai">
-        <img src={ai} className="aboutme-image" alt="ai" />
-        <p className="aboutme-ai-text"><a href="https://johnadhikari.github.io/chat-bot/" target="_blank" rel="noopener noreferrer">Zone - Ai</a></p>
+    <div className="aboutme-card glass-panel">
+      {/* Cover Header Banner */}
+      <div className="profile-cover"></div>
+
+      <div className="profile-content">
+        <div className="profile-avatar-row">
+          <div className="avatar-wrapper">
+            <img src={pfp} className="profile-avatar" alt="Avatar" />
+            <span className="online-indicator"></span>
+          </div>
+          <button
+            className="edit-profile-btn"
+            onClick={() => isEditing ? handleSaveBio() : setIsEditing(true)}
+          >
+            {isEditing ? "Save" : "Edit Bio"}
+          </button>
+        </div>
+
+        <div className="profile-meta">
+          <h3 className="profile-username">{username}</h3>
+          <span className="profile-handle">@{username.toLowerCase().replace(/\s+/g, '')}</span>
+        </div>
+
+        {/* Bio Section */}
+        <div className="profile-bio-box">
+          {isEditing ? (
+            <textarea
+              className="bio-input"
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows="3"
+            />
+          ) : (
+            <p className="profile-bio-text">{bio}</p>
+          )}
+        </div>
+
+        {/* Stats Row */}
+        <div className="profile-stats">
+          <div className="stat-item">
+            <span className="stat-value">12</span>
+            <span className="stat-label">Posts</span>
+          </div>
+          <div className="stat-divider"></div>
+          <div className="stat-item">
+            <span className="stat-value">1.4k</span>
+            <span className="stat-label">Followers</span>
+          </div>
+          <div className="stat-divider"></div>
+          <div className="stat-item">
+            <span className="stat-value">482</span>
+            <span className="stat-label">Following</span>
+          </div>
+        </div>
+
+        {/* Zone AI Link */}
+        <a
+          href="https://johnadhikari.github.io/chat-bot/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="zone-ai-card"
+        >
+          <div className="ai-icon-bg">
+            <img src={ai} className="ai-img" alt="Zone AI" />
+          </div>
+          <div className="ai-card-text">
+            <span className="ai-title">Zone AI Assistant</span>
+            <span className="ai-sub">Chat with smart agent &rarr;</span>
+          </div>
+        </a>
       </div>
     </div>
   );

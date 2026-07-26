@@ -1,3 +1,4 @@
+import { useState } from "react";
 import "./homepage.css";
 import NavigationBar from "./NavigationBar/NavigationBar";
 import DisplayPosts from "./DisplayPosts/DisplayPosts";
@@ -5,27 +6,48 @@ import Contact from "./ContactList/Contact";
 import AboutMe from "./aboutme/AboutMe";
 
 function Homepage() {
-  return (<>
-    <div className="homepage-container">
-      <div className="homepage-nav-bar-container">
-        <NavigationBar />
-      </div>
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("feed");
 
-      <div className="homepage-content-grid">
-        <div className="homepage-left-sidebar">
-          <AboutMe />
+  return (
+    <div className="homepage-root">
+      <div className="homepage-container">
+        {/* Navigation Bar */}
+        <NavigationBar
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+        />
+
+        {/* Main Grid Content */}
+        <div className="homepage-content-grid">
+          {/* Left Column: User Profile Widget */}
+          <aside className="homepage-left-sidebar">
+            <AboutMe />
+          </aside>
+
+          {/* Center Column: Feed & Post Creation Stream */}
+          <main className="homepage-main-feed">
+            <DisplayPosts
+              searchQuery={searchQuery}
+              activeTab={activeTab}
+            />
+          </main>
+
+          {/* Right Column: Active Contacts & Trends */}
+          <aside className="homepage-right-sidebar">
+            <Contact />
+          </aside>
         </div>
-        <div className="homepage-main-feed">  
-          <DisplayPosts />
-        </div>
-        <div className="homepage-right-sidebar">
-          <Contact />
-        </div>
-        
+
+        {/* Footer */}
+        <footer className="homepage-footer">
+          <p>© {new Date().getFullYear()} Zone Media • Built with React & AI Agents</p>
+        </footer>
       </div>
     </div>
-    <footer><p className="cc">© {new Date().getFullYear()} John Adhikari</p></footer>
-  </>);
+  );
 }
 
 export default Homepage;

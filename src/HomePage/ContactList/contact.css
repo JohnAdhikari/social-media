@@ -1,0 +1,155 @@
+.contact-sidebar-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.contact-card, .trends-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.contact-header, .trends-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.contact-header h3, .trends-header h3 {
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.contact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  transition: background 0.2s ease;
+}
+
+.contact-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.contact-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.contact-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.contact-online-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-emerald);
+  border: 2px solid var(--bg-secondary);
+  border-radius: 50%;
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contact-status {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.follow-btn {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: var(--accent-primary);
+  font-size: 0.775rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.follow-btn:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.follow-btn.following {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--border-glass);
+  color: var(--text-muted);
+}
+
+.trends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  transition: border-color 0.2s ease;
+}
+
+.trend-item:hover {
+  border-color: var(--accent-cyan);
+}
+
+.trend-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.trend-tag {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+}
+
+.trend-count {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.trend-icon {
+  font-size: 1rem;
+}

@@ -1,25 +1,189 @@
-.aboutme-info,.aboutme-ai{
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
+.aboutme-card {
+  width: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
-.aboutme-image{
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    object-fit: cover;
+
+.profile-cover {
+  height: 90px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.4) 0%, rgba(236, 72, 153, 0.3) 50%, rgba(6, 182, 212, 0.4) 100%);
+  position: relative;
 }
-.aboutme-name{
-    font-size: 18px;
-    font-family: Arial, Helvetica, sans-serif;
+
+.profile-content {
+  padding: 0 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
-.aboutme-ai-text{
-    font-size: 18px;
-    font-family: Arial, Helvetica, sans-serif;
-    cursor: pointer;
+
+.profile-avatar-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: -40px;
 }
-.aboutme-ai:hover{
-    background-color: #f0f2f5;
+
+.avatar-wrapper {
+  position: relative;
+}
+
+.profile-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid var(--bg-secondary);
+  background: var(--bg-secondary);
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  background: var(--accent-emerald);
+  border: 2px solid var(--bg-secondary);
+  border-radius: 50%;
+}
+
+.edit-profile-btn {
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-glass);
+  color: var(--text-main);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.edit-profile-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--accent-primary);
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-username {
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.profile-handle {
+  font-size: 0.8rem;
+  color: var(--accent-cyan);
+}
+
+.profile-bio-box {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.profile-bio-text {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.bio-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.875rem;
+  resize: none;
+}
+
+.profile-stats {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid var(--border-glass);
+  padding: 12px 8px;
+  border-radius: var(--radius-lg);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--text-main);
+}
+
+.stat-label {
+  font-size: 0.725rem;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-glass);
+}
+
+.zone-ai-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(6, 182, 212, 0.15) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: var(--radius-lg);
+  transition: transform 0.2s ease;
+}
+
+.zone-ai-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent-cyan);
+}
+
+.ai-icon-bg {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.ai-card-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.ai-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.ai-sub {
+  font-size: 0.75rem;
+  color: var(--accent-cyan);
 }

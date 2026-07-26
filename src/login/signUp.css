@@ -1,187 +1,159 @@
-/* --- 1. Universal Reset (Prevents White Edges) --- */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html, body {
-  height: 100%;
-  width: 100%;
-  background-color: hsl(0, 0%, 2%);
-  overflow-x: hidden; /* No side scrolling */
-}
-
-/* --- Container --- */
 .signup-container {
-  background-color: hsl(0, 0%, 2%);
-  color: white;
-  min-height: 100vh; /* changed from fixed height to min-height */
-  font-family: Arial, Helvetica, sans-serif;
-  
-  display: grid;
-  /* Balanced layout similar to Login page */
-  grid-template-columns: 1fr 1fr; 
-  align-items: center;
-  justify-items: center;
-  padding: 20px;
-  gap: 40px;
-}
-
-/* --- Left Side Images --- */
-.image {
+  min-height: 100vh;
+  width: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 15px;
+  justify-content: center;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
 }
 
-.img-logo {
-  height: 100px;
-  width: 100px;
-  object-fit: contain;
+.signup-backdrop-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  opacity: 0.35;
 }
 
-.img-text {
-  height: 150px; /* Reduced slightly to fit better */
-  width: 200px;
-  object-fit: contain;
+.signup-backdrop-glow.glow-1 {
+  width: 400px;
+  height: 400px;
+  background: var(--accent-cyan);
+  top: 5%;
+  right: 15%;
 }
 
-/* --- Right Side Form Box --- */
+.signup-backdrop-glow.glow-2 {
+  width: 350px;
+  height: 350px;
+  background: var(--accent-secondary);
+  bottom: 5%;
+  left: 15%;
+}
+
 .signup-box {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 30px 40px;
-  width: 400px; /* Slightly wider for the 2-column inputs */
-  box-shadow: 0px 0px 15px rgba(255, 255, 255, 0.15);
+  width: 100%;
+  max-width: 540px;
+  padding: 40px;
+  position: relative;
+  z-index: 10;
+}
+
+.signup-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.brand-header {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.brand-header .img-logo {
+  width: 48px;
+  height: 48px;
+}
+
+.brand-header .img-text {
+  height: 28px;
 }
 
 .title {
-  margin-bottom: 5px;
+  font-family: var(--font-heading);
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
 }
 
 .subtitle {
-  margin-bottom: 20px;
-  font-weight: normal;
-  color: #ccc;
+  color: var(--text-muted);
+  font-size: 0.95rem;
 }
 
-/* --- Inputs --- */
-.input {
-  border: none;
-  background-color: rgba(255, 255, 255, 0.1);
-  outline: none;
-  box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.2);
-  margin-bottom: 15px;
-  padding: 12px;
-  border-radius: 6px;
-  width: 100%;
-  font-size: 1rem;
-  color: white;
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-/* Fix for Name Row (First/Last name side by side) */
 .name-row {
-  display: flex;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
 }
 
-/* Fix for Birthday Row */
 .birthday-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 10px;
-  margin-bottom: 15px;
 }
 
 .birth {
-  cursor: pointer;
-  margin-bottom: 0; /* Removing bottom margin inside row */
+  padding: 10px 12px;
+  font-size: 0.9rem;
 }
 
-/* Fix for Gender Row */
 .gender-row {
-  display: flex;
-  justify-content: space-between;
-  background-color: rgba(255, 255, 255, 0.1);
-  padding: 10px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  box-shadow: 0px 0px 5px rgba(255, 255, 255, 0.2);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
 }
 
 .gender-option {
   display: flex;
   align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.label {
-  display: block;
-  margin-bottom: 5px;
-  font-size: 0.9rem;
-  color: #ddd;
-}
-
-option {
-  color: black; /* Essential so options are readable on white bg */
-}
-
-/* --- Button --- */
-.signup-btn {
-  border: none;
-  background: linear-gradient(135deg, #00c896, #008cff);
-  width: 100%;
-  color: white;
-  cursor: pointer;
-  height: 45px;
-  font-size: 1.3rem;
-  border-radius: 6px;
-  font-weight: bold;
-  margin-top: 10px;
-  margin-bottom: 10px;
-  transition: 0.2s ease;
-  
-  /* Flexbox to center text in Link */
-  display: flex;
   justify-content: center;
-  align-items: center;
-  text-decoration: none;
+  gap: 8px;
+  padding: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
 }
 
-.signup-btn:hover {
-  transform: scale(1.02);
-  box-shadow: 0px 0px 10px #00c896;
+.gender-option.active, .gender-option:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-main);
+  background: rgba(99, 102, 241, 0.15);
 }
 
-/* --- Footer Links --- */
+.signup-btn {
+  width: 100%;
+  padding: 14px;
+  font-size: 1rem;
+  margin-top: 10px;
+}
+
 .message {
-  margin-top: 15px;
   text-align: center;
   font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 10px;
 }
 
 .login-link {
-  color: #00c8ff;
-  text-decoration: underline;
+  color: var(--accent-cyan);
+  font-weight: 600;
 }
 
 .login-link:hover {
-  color: #64d4ff;
+  text-decoration: underline;
 }
 
-/* --- Responsive for Mobile --- */
-@media (max-width: 768px) {
-  .signup-container {
-    grid-template-columns: 1fr; /* Stack vertically on mobile */
-    height: auto;
+@media (max-width: 600px) {
+  .signup-box {
+    padding: 24px 18px;
   }
-  .image {
-    margin-bottom: 20px;
+  .name-row {
+    grid-template-columns: 1fr;
   }
 }
