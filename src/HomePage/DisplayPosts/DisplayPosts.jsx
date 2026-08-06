@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import pfp from "../../assets/pfp.png";
 import imageIcon from "../../assets/image.png";
+import useGsapReveal from "../../hooks/useGsapReveal";
 import "./displayposts.css";
 
 const INITIAL_POSTS = [
@@ -49,6 +50,8 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
   const [activeCommentPostId, setActiveCommentPostId] = useState(null);
   const [commentInput, setCommentInput] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const feedRef = useRef(null);
+  useGsapReveal(feedRef, { y: 28, stagger: 0.09 });
 
   useEffect(() => {
     localStorage.setItem("zone_posts", JSON.stringify(posts));
@@ -214,16 +217,20 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
       </div>
 
       {/* Posts Stream */}
-      <div className="posts-feed">
+      <div className="posts-feed" ref={feedRef}>
         {filteredPosts.length === 0 ? (
           <div className="empty-feed glass-panel">
-            <div className="empty-icon">💬</div>
+            <div className="empty-icon" aria-hidden="true">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </div>
             <h3>No posts found</h3>
             <p>Be the first to share a moment or update your search filter!</p>
           </div>
         ) : (
           filteredPosts.map((post) => (
-            <article key={post.id} className="post-card glass-panel">
+            <article key={post.id} className="post-card glass-panel" data-reveal>
               {/* Post Header */}
               <div className="post-card-header">
                 <div className="author-info">
@@ -238,8 +245,12 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
                 </div>
 
                 {post.username === username && (
-                  <button className="delete-post-btn" onClick={() => handleDeletePost(post.id)} title="Delete post">
-                    🗑️
+                  <button className="delete-post-btn" onClick={() => handleDeletePost(post.id)} title="Delete post" aria-label="Delete post">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14"></path>
+                      <line x1="10" y1="11" x2="10" y2="17"></line>
+                      <line x1="14" y1="11" x2="14" y2="17"></line>
+                    </svg>
                   </button>
                 )}
               </div>

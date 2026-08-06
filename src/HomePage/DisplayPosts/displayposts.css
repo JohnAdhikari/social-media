@@ -12,19 +12,13 @@
   z-index: 1000;
   padding: 12px 20px;
   border-color: rgba(99, 102, 241, 0.4);
-  background: rgba(15, 23, 42, 0.95);
+  background: var(--bg-toast);
   animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideIn {
-  from {
-    transform: translateY(-20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  from { transform: translateY(-20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .create-post-card {
@@ -135,7 +129,7 @@
 }
 
 .upload-btn-label:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-glass-hover);
   color: var(--text-main);
 }
 
@@ -154,7 +148,6 @@
   cursor: not-allowed;
 }
 
-/* Feed List */
 .posts-feed {
   display: flex;
   flex-direction: column;
@@ -177,6 +170,7 @@
 .empty-feed h3 {
   font-family: var(--font-heading);
   font-size: 1.4rem;
+  color: var(--text-main);
 }
 
 .empty-feed p {
@@ -249,7 +243,7 @@
 }
 
 .post-text {
-  color: #e2e8f0;
+  color: var(--text-post);
   font-size: 0.975rem;
   line-height: 1.6;
   white-space: pre-line;
@@ -291,7 +285,7 @@
 }
 
 .action-button:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-glass-hover);
   color: var(--text-main);
 }
 
@@ -304,7 +298,6 @@
   stroke: #ec4899;
 }
 
-/* Comments Section */
 .comments-section {
   margin-top: 8px;
   padding-top: 16px;
@@ -332,7 +325,7 @@
 }
 
 .comment-bubble {
-  background: rgba(30, 41, 59, 0.6);
+  background: var(--bg-comment);
   border: 1px solid var(--border-glass);
   padding: 10px 14px;
   border-radius: var(--radius-md);
@@ -343,7 +336,6 @@
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--accent-cyan);
-
 }
 
 .comment-text {
@@ -367,4 +359,37 @@
 .send-comment-btn {
   padding: 8px 16px;
   font-size: 0.85rem;
+}
+
+@media (max-width: 768px) {
+  .display-posts-container {
+    gap: 14px;
+  }
+  .create-post-card {
+    padding: 14px;
+  }
+  .post-card {
+    padding: 14px;
+  }
+  .action-button {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+  .toast-notification {
+    top: 70px;
+    right: 12px;
+    left: 12px;
+    font-size: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .post-footer {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .action-button svg {
+    width: 16px;
+    height: 16px;
+  }
 }

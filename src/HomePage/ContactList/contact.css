@@ -41,7 +41,7 @@
 }
 
 .contact-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-glass-hover);
 }
 
 .contact-avatar-wrapper {
@@ -63,7 +63,7 @@
   width: 10px;
   height: 10px;
   background: var(--accent-emerald);
-  border: 2px solid var(--bg-secondary);
+  border: 2px solid var(--online-dot-border);
   border-radius: 50%;
 }
 
@@ -108,7 +108,7 @@
 }
 
 .follow-btn.following {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-glass-hover);
   border-color: var(--border-glass);
   color: var(--text-muted);
 }
@@ -124,7 +124,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: rgba(15, 23, 42, 0.5);
+  background: var(--bg-trend-item);
   border: 1px solid var(--border-glass);
   border-radius: var(--radius-md);
   transition: border-color 0.2s ease;
@@ -152,4 +152,10 @@
 
 .trend-icon {
   font-size: 1rem;
+}
+
+@media (max-width: 768px) {
+  .contact-card, .trends-card {
+    padding: 14px;
+  }
 }

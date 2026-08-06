@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import logo from "../../assets/logo.png";
 import pfp from "../../assets/pfp.png";
 import ai from "../../assets/ai.png";
@@ -8,7 +8,17 @@ import "./navigationbar.css";
 function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab }) {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [theme, setTheme] = useState(() => localStorage.getItem("zone_media_theme") || "dark");
   const username = localStorage.getItem("username") || "Guest";
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("zone_media_theme", theme);
+  }, [theme]);
+
+  function toggleTheme() {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  }
 
   function handleLogout() {
     localStorage.removeItem("username");
@@ -17,7 +27,6 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
 
   return (
     <>
-      {/* Desktop Top Header Bar */}
       <header className="navbar-container glass-panel">
         <div className="navbar-left">
           <Link to="/homepage" className="nav-brand">
@@ -42,7 +51,6 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
           </div>
         </div>
 
-        {/* Center Nav Links */}
         <nav className="navbar-center">
           <button
             className={`nav-tab ${activeTab === 'feed' ? 'active' : ''}`}
@@ -77,8 +85,31 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
           </a>
         </nav>
 
-        {/* Right User Actions */}
         <div className="navbar-right">
+          <button
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          >
+            {theme === 'dark' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5"/>
+                <line x1="12" y1="1" x2="12" y2="3"/>
+                <line x1="12" y1="21" x2="12" y2="23"/>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                <line x1="1" y1="12" x2="3" y2="12"/>
+                <line x1="21" y1="12" x2="23" y2="12"/>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              </svg>
+            )}
+          </button>
+
           <div className="user-profile-badge">
             <img src={pfp} alt="Profile" className="nav-pfp" />
             <span className="nav-username">{username}</span>
@@ -107,7 +138,6 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
         </div>
       </header>
 
-      {/* Mobile Drawer Navigation */}
       {isMobileMenuOpen && (
         <div className="mobile-drawer-overlay" onClick={() => setIsMobileMenuOpen(false)}>
           <div className="mobile-drawer glass-panel" onClick={(e) => e.stopPropagation()}>
@@ -138,6 +168,9 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
               <button className="drawer-item" onClick={() => { setActiveTab('explore'); setIsMobileMenuOpen(false); }}>
                 🧭 Explore Topics
               </button>
+              <button className="drawer-item" onClick={toggleTheme}>
+                {theme === 'dark' ? '☀️' : '🌙'} {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+              </button>
               <a href="https://johnadhikari.github.io/chat-bot/" target="_blank" rel="noopener noreferrer" className="drawer-item">
                 🤖 Zone AI Assistant
               </a>
@@ -149,7 +182,6 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
         </div>
       )}
 
-      {/* Mobile Fixed Bottom Navigation Bar */}
       <nav className="mobile-bottom-bar glass-panel">
         <button
           className={`bottom-tab ${activeTab === 'feed' ? 'active' : ''}`}
@@ -170,6 +202,23 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
             <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon>
           </svg>
           <span>Explore</span>
+        </button>
+
+        <button className={`bottom-tab ${theme === 'light' ? 'active' : ''}`} onClick={toggleTheme}>
+          {theme === 'dark' ? (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          ) : (
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          )}
+          <span>Theme</span>
         </button>
 
         <a

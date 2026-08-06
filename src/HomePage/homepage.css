@@ -35,7 +35,6 @@
   border-top: 1px solid var(--border-glass);
 }
 
-/* Responsive Media Queries */
 @media (max-width: 1100px) {
   .homepage-content-grid {
     grid-template-columns: 260px 1fr;
@@ -55,5 +54,8 @@
   }
   .homepage-left-sidebar {
     position: static;
+  }
+  .homepage-footer {
+    margin-top: 32px;
   }
 }

@@ -17,7 +17,6 @@ const TRENDS = [
 ];
 
 function Contact() {
-  const [activeTab, setActiveTab] = useState("online");
   const [following, setFollowing] = useState({});
 
   function toggleFollow(id) {
@@ -69,7 +68,11 @@ function Contact() {
                 <span className="trend-tag">{trend.tag}</span>
                 <span className="trend-count">{trend.posts}</span>
               </div>
-              <span className="trend-icon">🔥</span>
+              <span className="trend-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2c1 3-2 4-2 7a2 2 0 0 0 4 0c1 2 2 3 2 5a6 6 0 0 1-12 0c0-4 3-6 4-9 1 2 3 2 4-3z"></path>
+                </svg>
+              </span>
             </div>
           ))}
         </div>
