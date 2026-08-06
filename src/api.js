@@ -31,7 +31,6 @@ export const api = {
   // Auth
   register: (data) => request("/register", { method: "POST", body: JSON.stringify(data) }),
   login: (data) => request("/login", { method: "POST", body: JSON.stringify(data) }),
-  getUser: (username) => request(`/users/${encodeURIComponent(username)}`),
 
   // Posts
   getPosts: () => request("/posts"),
@@ -51,6 +50,16 @@ export const api = {
     request("/friends/respond", { method: "POST", body: JSON.stringify({ from_user: fromUser, accept }) }),
   removeFriend: (username) =>
     request("/friends/remove", { method: "POST", body: JSON.stringify({ to_user: username }) }),
+
+  // Messages
+  getConversations: () => request("/conversations"),
+  getThread: (otherUser) => request(`/messages/${encodeURIComponent(otherUser)}`),
+  sendMessage: (otherUser, text) =>
+    request(`/messages/${encodeURIComponent(otherUser)}`, { method: "POST", body: JSON.stringify({ text }) }),
+
+  // Profiles
+  getUser: (username) => request(`/users/${encodeURIComponent(username)}`),
+  getUserPosts: (username) => request(`/users/${encodeURIComponent(username)}/posts`),
 };
 
 export default api;

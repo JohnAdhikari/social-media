@@ -57,6 +57,9 @@ class FriendRespond(BaseModel):
     from_user: str
     accept: bool
 
+class MessageCreate(BaseModel):
+    text: str
+
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -128,6 +131,15 @@ def init_db() -> None:
                 user_b TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 UNIQUE (user_a, user_b)
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_user TEXT NOT NULL,
+                to_user TEXT NOT NULL,
+                text TEXT NOT NULL,
+                read INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
             );
         """)
         conn.commit()
@@ -295,6 +307,15 @@ def _serialize_post(row, conn) -> dict:
 def get_posts() -> List[dict]:
     with connect() as conn:
         posts = conn.execute("SELECT * FROM posts ORDER BY id DESC").fetchall()
+        return [_serialize_post(p, conn) for p in posts]
+
+
+@app.get("/api/users/{username}/posts")
+def get_user_posts(username: str) -> List[dict]:
+    with connect() as conn:
+        posts = conn.execute(
+            "SELECT * FROM posts WHERE username = ? ORDER BY id DESC", (username,)
+        ).fetchall()
         return [_serialize_post(p, conn) for p in posts]
 
 
@@ -480,3 +501,92 @@ def remove_friend(payload: FriendRequestCreate, author: str = Depends(get_author
         )
         conn.commit()
     return {"status": "success", "removed": other}
+
+
+# ---------------------------------------------------------------------------
+# Messages
+# ---------------------------------------------------------------------------
+
+def _serialize_message(row) -> dict:
+    return {
+        "id": row["id"],
+        "from_user": row["from_user"],
+        "to_user": row["to_user"],
+        "text": row["text"],
+        "read": bool(row["read"]),
+        "created_at": row["created_at"],
+    }
+
+
+@app.get("/api/conversations")
+def get_conversations(author: str = Depends(get_author)) -> List[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE from_user = ? OR to_user = ? ORDER BY id ASC",
+            (author, author),
+        ).fetchall()
+        threads = {}
+        for r in rows:
+            other = r["from_user"] if r["to_user"] == author else r["to_user"]
+            if other not in threads:
+                threads[other] = []
+            threads[other].append(r)
+        result = []
+        for other, msgs in threads.items():
+            last = msgs[-1]
+            unread = sum(1 for m in msgs if m["to_user"] == author and not m["read"])
+            is_friend = bool(
+                conn.execute(
+                    "SELECT id FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+                    (author, other, other, author),
+                ).fetchone()
+            )
+            result.append({
+                "username": other,
+                "is_friend": is_friend,
+                "last_message": last["text"],
+                "last_time": last["created_at"],
+                "unread": unread,
+            })
+        result.sort(key=lambda t: t["last_time"], reverse=True)
+        return result
+
+
+@app.get("/api/messages/{other_user}")
+def get_thread(other_user: str, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        # Mark messages to author as read
+        conn.execute(
+            "UPDATE messages SET read = 1 WHERE from_user = ? AND to_user = ?",
+            (other_user, author),
+        )
+        conn.commit()
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE "
+            "(from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?) ORDER BY id ASC",
+            (author, other_user, other_user, author),
+        ).fetchall()
+        other = conn.execute("SELECT * FROM users WHERE username = ?", (other_user,)).fetchone()
+        other_profile = {
+            "username": other["username"] if other else other_user,
+            "bio": other["bio"] if other else "",
+            "post_count": _post_count(conn, other_user) if other else 0,
+        }
+        return {"other": other_profile, "messages": [_serialize_message(r) for r in rows]}
+
+
+@app.post("/api/messages/{other_user}", status_code=201)
+def send_message(other_user: str, payload: MessageCreate, author: str = Depends(get_author)) -> dict:
+    if not payload.text.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    with connect() as conn:
+        target = conn.execute("SELECT id FROM users WHERE username = ?", (other_user,)).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        cursor = conn.execute(
+            "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (?, ?, ?, 0, ?)",
+            (author, other_user, payload.text.strip(), now_iso()),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _serialize_message(row)

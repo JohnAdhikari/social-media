@@ -119,6 +119,14 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
 
         <div className="navbar-right">
           <div className="nav-notif-wrap">
+            <Link to="/messages" className="theme-toggle-btn nav-msg-btn" aria-label="Messages">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </Link>
+          </div>
+
+          <div className="nav-notif-wrap">
             <button
               className="theme-toggle-btn nav-notif-btn"
               onClick={() => setNotifOpen((o) => !o)}
@@ -176,11 +184,11 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
             )}
           </button>
 
-          <div className="user-profile-badge">
+          <Link to="/profile" className="user-profile-badge" title="My profile">
             <img src={pfp} alt="Profile" className="nav-pfp" />
             <span className="nav-username">{username}</span>
             <span className="pulse-dot"></span>
-          </div>
+          </Link>
 
           <button className="nav-logout-btn" onClick={handleLogout} title="Logout">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
