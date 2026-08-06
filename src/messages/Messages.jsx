@@ -47,18 +47,44 @@ function Messages() {
     };
   }, [activeUser]);
 
-  useEffect(() => {
+useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread]);
 
+  // Live updates via WebSocket — replaces the 5s polling we used before.
   useEffect(() => {
     if (!activeUser) return;
-    const id = setInterval(async () => {
-      const data = await api.getThread(activeUser);
-      setThread(data.messages || []);
-      await loadConversations();
-    }, 5000);
-    return () => clearInterval(id);
+    let ws;
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    try {
+      ws = new WebSocket(`${proto}://${window.location.host}/ws/${encodeURIComponent(username)}`);
+    } catch {
+      return;
+    }
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type !== "message") return;
+        const m = data.message;
+        // Only append if it belongs to this thread
+        if (m.from_user === activeUser) {
+          setThread((t) =>
+            t.some((x) => x.id === m.id) ? t : [...t, m]
+          );
+        }
+        loadConversations();
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser]);
 
   async function handleSend(e) {

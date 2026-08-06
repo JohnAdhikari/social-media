@@ -6,11 +6,12 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -28,6 +29,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# WebSocket connection manager (in-memory, per-process)
+# ---------------------------------------------------------------------------
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self.active: dict[str, WebSocket] = {}
+        self._lock = threading.Lock()
+
+    async def connect(self, username: str, ws: WebSocket) -> None:
+        await ws.accept()
+        with self._lock:
+            # One connection per user; drop the old one if present
+            self.active[username] = ws
+
+    def disconnect(self, username: str) -> None:
+        with self._lock:
+            self.active.pop(username, None)
+
+    async def notify(self, username: str, event: dict) -> None:
+        with self._lock:
+            ws = self.active.get(username)
+        if ws is not None:
+            try:
+                await ws.send_json(event)
+            except Exception:
+                self.disconnect(username)
+
+
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/{username}")
+async def websocket_endpoint(ws: WebSocket, username: str) -> None:
+    await manager.connect(username, ws)
+    try:
+        while True:
+            # Keep the socket open; clients use REST to send, WS to receive.
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(username)
+    except Exception:
+        manager.disconnect(username)
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -576,7 +622,7 @@ def get_thread(other_user: str, author: str = Depends(get_author)) -> dict:
 
 
 @app.post("/api/messages/{other_user}", status_code=201)
-def send_message(other_user: str, payload: MessageCreate, author: str = Depends(get_author)) -> dict:
+async def send_message(other_user: str, payload: MessageCreate, author: str = Depends(get_author)) -> dict:
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     with connect() as conn:
@@ -589,4 +635,7 @@ def send_message(other_user: str, payload: MessageCreate, author: str = Depends(
         )
         conn.commit()
         row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
-    return _serialize_message(row)
+    message = _serialize_message(row)
+    # Push the new message to the recipient's live socket if connected
+    await manager.notify(other_user, {"type": "message", "message": message})
+    return message
