@@ -8,7 +8,14 @@ from pathlib import Path
 import secrets
 import sqlite3
 
+from app import init_db
+
 DB_PATH = Path(os.environ.get("ZONE_DATA_DIR", Path(__file__).resolve().parent / "data")) / "social.db"
+
+
+def ensure_db_dir() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 
 # Demo account so "Quick Demo Sign In" works with token auth.
 DEMO_USERNAME = "John Adhikari"
@@ -74,6 +81,8 @@ SAMPLE_POSTS = [
 
 
 def seed() -> None:
+    ensure_db_dir()
+    init_db()
     conn = sqlite3.connect(DB_PATH)
     try:
         seed_user(conn)
