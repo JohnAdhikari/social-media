@@ -44,6 +44,7 @@ export const api = {
   // Friends
   getFriends: () => request("/friends"),
   searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(q)}`),
+  suggestFriends: () => request("/users/suggest"),
   sendFriendRequest: (toUser) =>
     request("/friends/request", { method: "POST", body: JSON.stringify({ to_user: toUser }) }),
   respondFriendRequest: (fromUser, accept) =>

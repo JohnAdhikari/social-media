@@ -3,18 +3,50 @@ import { useState, useEffect } from "react";
 import logo from "../../assets/logo.png";
 import pfp from "../../assets/pfp.png";
 import ai from "../../assets/ai.png";
+import api from "../../api";
 import "./navigationbar.css";
 
 function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab }) {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("zone_media_theme") || "dark");
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState([]);
   const username = localStorage.getItem("username") || "Guest";
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("zone_media_theme", theme);
   }, [theme]);
+
+  // Poll for friend requests so the nav badge stays fresh
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      try {
+        const data = await api.getFriends();
+        if (alive) setNotifs(data.pending_incoming || []);
+      } catch {
+        /* backend may be offline */
+      }
+    }
+    poll();
+    const id = setInterval(poll, 15000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  async function handleRespond(fromUser, accept) {
+    try {
+      await api.respondFriendRequest(fromUser, accept);
+      const data = await api.getFriends();
+      setNotifs(data.pending_incoming || []);
+    } catch {
+      /* ignore */
+    }
+  }
 
   function toggleTheme() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
@@ -86,6 +118,40 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
         </nav>
 
         <div className="navbar-right">
+          <div className="nav-notif-wrap">
+            <button
+              className="theme-toggle-btn nav-notif-btn"
+              onClick={() => setNotifOpen((o) => !o)}
+              aria-label="Friend requests"
+              aria-expanded={notifOpen}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              {notifs.length > 0 && <span className="nav-notif-badge">{notifs.length}</span>}
+            </button>
+
+            {notifOpen && (
+              <div className="nav-notif-drop glass-panel">
+                <div className="nav-notif-head">Friend Requests</div>
+                {notifs.length === 0 ? (
+                  <div className="nav-notif-empty">No new requests</div>
+                ) : (
+                  notifs.map((name) => (
+                    <div key={name} className="nav-notif-item">
+                      <span className="nav-notif-name">{name}</span>
+                      <div className="nav-notif-actions">
+                        <button className="nav-notif-accept" onClick={() => handleRespond(name, true)}>Accept</button>
+                        <button className="nav-notif-decline" onClick={() => handleRespond(name, false)}>Decline</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             className="theme-toggle-btn"
             onClick={toggleTheme}

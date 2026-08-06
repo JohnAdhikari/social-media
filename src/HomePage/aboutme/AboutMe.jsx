@@ -1,12 +1,32 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./aboutme.css";
 import pfp from "../../assets/pfp.png";
 import ai from "../../assets/ai.png";
+import api from "../../api";
 
 function AboutMe() {
   const username = localStorage.getItem("username") || "John Adhikari";
+  const [stats, setStats] = useState({ post_count: 0, friend_count: 0, request_count: 0 });
   const [bio, setBio] = useState(() => localStorage.getItem("zone_user_bio") || "Full-stack developer & AI enthusiast building future web apps.");
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadStats() {
+      try {
+        const data = await api.getFriends();
+        if (alive) setStats(data.stats || { post_count: 0, friend_count: 0, request_count: 0 });
+      } catch {
+        /* backend may be offline */
+      }
+    }
+    loadStats();
+    const id = setInterval(loadStats, 20000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   function handleSaveBio() {
     localStorage.setItem("zone_user_bio", bio);
@@ -54,18 +74,18 @@ function AboutMe() {
         {/* Stats Row */}
         <div className="profile-stats">
           <div className="stat-item">
-            <span className="stat-value">12</span>
+            <span className="stat-value">{stats.post_count}</span>
             <span className="stat-label">Posts</span>
           </div>
           <div className="stat-divider"></div>
           <div className="stat-item">
-            <span className="stat-value">1.4k</span>
-            <span className="stat-label">Followers</span>
+            <span className="stat-value">{stats.friend_count}</span>
+            <span className="stat-label">Friends</span>
           </div>
           <div className="stat-divider"></div>
           <div className="stat-item">
-            <span className="stat-value">482</span>
-            <span className="stat-label">Following</span>
+            <span className="stat-value">{stats.request_count}</span>
+            <span className="stat-label">Requests</span>
           </div>
         </div>
 

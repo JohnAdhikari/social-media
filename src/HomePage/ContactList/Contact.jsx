@@ -15,6 +15,7 @@ function Contact() {
   const [friends, setFriends] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [discover, setDiscover] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -28,6 +29,15 @@ function Contact() {
       setIncoming(data.pending_incoming || []);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadSuggestions() {
+    try {
+      const list = await api.suggestFriends();
+      setSuggestions(list || []);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -47,6 +57,7 @@ function Contact() {
 
   useEffect(() => {
     load();
+    loadSuggestions();
   }, []);
 
   async function handleAdd(username) {
@@ -54,6 +65,7 @@ function Contact() {
     try {
       await api.sendFriendRequest(username);
       await runSearch(query);
+      await loadSuggestions();
     } catch {
       /* ignore */
     } finally {
@@ -86,7 +98,7 @@ function Contact() {
   }
 
   function friendStatus(username) {
-    if (friends.includes(username)) return "friends";
+    if (friends.some((f) => f.username === username)) return "friends";
     if (discover.some((u) => u.username === username && u.status === "outgoing")) return "outgoing";
     if (discover.some((u) => u.username === username && u.status === "incoming")) return "incoming";
     return "none";
@@ -107,19 +119,19 @@ function Contact() {
           <div className="contact-empty">No friends yet — find someone to connect with!</div>
         ) : (
           <div className="contact-list">
-            {friends.map((name) => (
-              <div key={name} className="contact-item">
+            {friends.map((f) => (
+              <div key={f.username} className="contact-item">
                 <div className="contact-avatar-wrapper">
-                  <img src={pfp} alt={name} className="contact-avatar" />
+                  <img src={pfp} alt={f.username} className="contact-avatar" />
                   <span className="contact-online-dot"></span>
                 </div>
                 <div className="contact-info">
-                  <span className="contact-name">{name}</span>
-                  <span className="contact-status">Friend</span>
+                  <span className="contact-name">{f.username}</span>
+                  <span className="contact-status">{f.post_count} post{f.post_count === 1 ? "" : "s"}</span>
                 </div>
                 <button
                   className="follow-btn following"
-                  onClick={() => handleRemove(name)}
+                  onClick={() => handleRemove(f.username)}
                   disabled={busy}
                 >
                   Remove
@@ -209,6 +221,31 @@ function Contact() {
           </div>
         )}
       </div>
+
+      {/* Suggested Friends Widget */}
+      {suggestions.length > 0 && (
+        <div className="contact-card glass-panel">
+          <div className="contact-header">
+            <h3>Suggested for you</h3>
+          </div>
+          <div className="contact-list">
+            {suggestions.map((u) => (
+              <div key={u.username} className="contact-item">
+                <div className="contact-avatar-wrapper">
+                  <img src={pfp} alt={u.username} className="contact-avatar" />
+                </div>
+                <div className="contact-info">
+                  <span className="contact-name">{u.username}</span>
+                  <span className="contact-status">{u.post_count} post{u.post_count === 1 ? "" : "s"}</span>
+                </div>
+                <button className="follow-btn" onClick={() => handleAdd(u.username)} disabled={busy}>
+                  Add
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Trending Topics Widget */}
       <div className="trends-card glass-panel">

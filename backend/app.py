@@ -223,7 +223,39 @@ def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
                     "outgoing" if name in pending_out else "none"
                 )
             )
-            result.append({"username": name, "email": r["email"], "bio": r["bio"], "status": status})
+            result.append({
+                "username": name,
+                "email": r["email"],
+                "bio": r["bio"],
+                "post_count": _post_count(conn, name),
+                "status": status,
+            })
+        return result
+
+
+@app.get("/api/users/suggest")
+def suggest_friends(author: str = Depends(get_author)) -> List[dict]:
+    with connect() as conn:
+        friends = set(_friend_names(conn, author))
+        pending_in = set(_incoming_requests(conn, author))
+        pending_out = set(_sent_requests(conn, author))
+        rows = conn.execute(
+            "SELECT * FROM users WHERE username != ? ORDER BY created_at DESC LIMIT 30",
+            (author,),
+        ).fetchall()
+        result = []
+        for r in rows:
+            name = r["username"]
+            if name in friends or name in pending_in or name in pending_out:
+                continue
+            result.append({
+                "username": name,
+                "email": r["email"],
+                "bio": r["bio"],
+                "post_count": _post_count(conn, name),
+            })
+            if len(result) >= 5:
+                break
         return result
 
 
@@ -231,9 +263,12 @@ def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
 def get_user(username: str) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    return _public_user(row)
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = _public_user(row)
+        user["post_count"] = _post_count(conn, username)
+        user["friend_count"] = len(_friend_names(conn, username))
+        return user
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +358,11 @@ def add_comment(post_id: int, payload: CommentCreate, author: str = Depends(get_
 # Friends
 # ---------------------------------------------------------------------------
 
+def _post_count(conn, username: str) -> int:
+    row = conn.execute("SELECT COUNT(*) AS c FROM posts WHERE username = ?", (username,)).fetchone()
+    return row["c"] if row else 0
+
+
 def _friend_names(conn, username: str) -> List[str]:
     rows = conn.execute(
         "SELECT user_a, user_b FROM friends WHERE user_a = ? OR user_b = ?",
@@ -353,10 +393,20 @@ def _sent_requests(conn, username: str) -> List[str]:
 @app.get("/api/friends")
 def get_friends(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
+        friend_names = _friend_names(conn, author)
+        friends = [
+            {"username": name, "post_count": _post_count(conn, name)}
+            for name in friend_names
+        ]
         return {
-            "friends": _friend_names(conn, author),
+            "friends": friends,
             "pending_incoming": _incoming_requests(conn, author),
             "pending_sent": _sent_requests(conn, author),
+            "stats": {
+                "friend_count": len(friend_names),
+                "request_count": len(_incoming_requests(conn, author)),
+                "post_count": _post_count(conn, author),
+            },
         }
 
 
