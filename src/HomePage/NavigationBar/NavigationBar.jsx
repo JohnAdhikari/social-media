@@ -4,6 +4,8 @@ import logo from "../../assets/logo.png";
 import pfp from "../../assets/pfp.png";
 import ai from "../../assets/ai.png";
 import api from "../../api";
+import useNotifications from "../../hooks/useNotifications";
+import usePresence from "../../hooks/usePresence";
 import "./navigationbar.css";
 
 function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab }) {
@@ -11,7 +13,8 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("zone_media_theme") || "dark");
   const [notifOpen, setNotifOpen] = useState(false);
-  const [notifs, setNotifs] = useState([]);
+  const { items: notifs, unread, load: reloadNotifs, markRead } = useNotifications();
+  const { isOnline } = usePresence();
   const username = localStorage.getItem("username") || "Guest";
 
   useEffect(() => {
@@ -19,41 +22,33 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
     localStorage.setItem("zone_media_theme", theme);
   }, [theme]);
 
-  // Poll for friend requests so the nav badge stays fresh
-  useEffect(() => {
-    let alive = true;
-    async function poll() {
-      try {
-        const data = await api.getFriends();
-        if (alive) setNotifs(data.pending_incoming || []);
-      } catch {
-        /* backend may be offline */
-      }
-    }
-    poll();
-    const id = setInterval(poll, 15000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
-
   async function handleRespond(fromUser, accept) {
     try {
       await api.respondFriendRequest(fromUser, accept);
-      const data = await api.getFriends();
-      setNotifs(data.pending_incoming || []);
+      await reloadNotifs();
     } catch {
       /* ignore */
     }
+  }
+
+  function toggleNotifications() {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    if (next) markRead();
   }
 
   function toggleTheme() {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await api.logout();
+    } catch {
+      /* backend may be offline */
+    }
     localStorage.removeItem("username");
+    localStorage.removeItem("zone_token");
     navigate("/");
   }
 
@@ -129,30 +124,32 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
           <div className="nav-notif-wrap">
             <button
               className="theme-toggle-btn nav-notif-btn"
-              onClick={() => setNotifOpen((o) => !o)}
-              aria-label="Friend requests"
+              onClick={toggleNotifications}
+              aria-label="Notifications"
               aria-expanded={notifOpen}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
               </svg>
-              {notifs.length > 0 && <span className="nav-notif-badge">{notifs.length}</span>}
+              {unread > 0 && <span className="nav-notif-badge">{unread}</span>}
             </button>
 
             {notifOpen && (
               <div className="nav-notif-drop glass-panel">
-                <div className="nav-notif-head">Friend Requests</div>
+                <div className="nav-notif-head">Notifications</div>
                 {notifs.length === 0 ? (
-                  <div className="nav-notif-empty">No new requests</div>
+                  <div className="nav-notif-empty">Nothing new yet</div>
                 ) : (
-                  notifs.map((name) => (
-                    <div key={name} className="nav-notif-item">
-                      <span className="nav-notif-name">{name}</span>
-                      <div className="nav-notif-actions">
-                        <button className="nav-notif-accept" onClick={() => handleRespond(name, true)}>Accept</button>
-                        <button className="nav-notif-decline" onClick={() => handleRespond(name, false)}>Decline</button>
-                      </div>
+                  notifs.slice(0, 15).map((n) => (
+                    <div key={n.id} className="nav-notif-item">
+                      <span className="nav-notif-name">{n.text || `${n.actor} · ${n.type}`}</span>
+                      {n.type === "friend_request" && (
+                        <div className="nav-notif-actions">
+                          <button className="nav-notif-accept" onClick={() => handleRespond(n.actor, true)}>Accept</button>
+                          <button className="nav-notif-decline" onClick={() => handleRespond(n.actor, false)}>Decline</button>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
@@ -187,7 +184,7 @@ function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab })
           <Link to="/profile" className="user-profile-badge" title="My profile">
             <img src={pfp} alt="Profile" className="nav-pfp" />
             <span className="nav-username">{username}</span>
-            <span className="pulse-dot"></span>
+            <span className={`pulse-dot ${isOnline(username) ? "" : "offline"}`}></span>
           </Link>
 
           <button className="nav-logout-btn" onClick={handleLogout} title="Logout">

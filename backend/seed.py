@@ -1,10 +1,38 @@
-"""Seed the Zone Media database with sample posts (idempotent)."""
+"""Seed the Zone Media database with sample posts + demo account (idempotent)."""
 
 from datetime import datetime, timezone
+import hashlib
+import hmac
+import os
 from pathlib import Path
+import secrets
 import sqlite3
 
-DB_PATH = Path(__file__).resolve().parent / "data" / "social.db"
+DB_PATH = Path(os.environ.get("ZONE_DATA_DIR", Path(__file__).resolve().parent / "data")) / "social.db"
+
+# Demo account so "Quick Demo Sign In" works with token auth.
+DEMO_USERNAME = "John Adhikari"
+DEMO_EMAIL = "john@example.com"
+DEMO_PASSWORD = "demo1234"
+
+
+def hash_password(password: str, salt: str) -> str:
+    return hmac.new(salt.encode(), password.encode(), hashlib.sha256).hexdigest()
+
+
+def seed_user(conn) -> None:
+    existing = conn.execute(
+        "SELECT id FROM users WHERE username = ? OR email = ?",
+        (DEMO_USERNAME, DEMO_EMAIL),
+    ).fetchone()
+    if existing:
+        return
+    salt = secrets.token_hex(16)
+    conn.execute(
+        "INSERT INTO users (username, email, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+        (DEMO_USERNAME, DEMO_EMAIL, salt, hash_password(DEMO_PASSWORD, salt), datetime.now(timezone.utc).isoformat()),
+    )
+    print(f"Created demo account: {DEMO_USERNAME} / {DEMO_PASSWORD}")
 
 SAMPLE_POSTS = [
     {
@@ -48,8 +76,10 @@ SAMPLE_POSTS = [
 def seed() -> None:
     conn = sqlite3.connect(DB_PATH)
     try:
+        seed_user(conn)
         count = conn.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
         if count > 0:
+            conn.commit()
             print(f"Database already has {count} posts — skipping seed.")
             return
         now = datetime.now(timezone.utc).isoformat()

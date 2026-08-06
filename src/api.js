@@ -1,18 +1,26 @@
 // Zone Media — API client. Talks to the FastAPI backend.
 // In dev, Vite proxies /api -> http://127.0.0.1:8000 (see vite.config.js).
-// In production builds the API base can be overridden via window.ZONE_API.
+// In production builds the API base can be overridden via:
+//   - VITE_ZONE_API env var (build time), or
+//   - window.ZONE_API (runtime, set before the bundle loads).
 
 const BASE =
-  typeof window !== "undefined" && window.ZONE_API
-    ? window.ZONE_API
-    : "/api";
+  (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_ZONE_API) ||
+  (typeof window !== "undefined" && window.ZONE_API) ||
+  "/api";
 
 async function request(path, options = {}) {
-  const username = localStorage.getItem("username") || "";
+  const token = localStorage.getItem("zone_token") || "";
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-  if (username) headers.author = username;
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${BASE}${path}`, { ...options, headers });
+  if (res.status === 401) {
+    // Session expired/invalid — bounce back to login
+    localStorage.removeItem("zone_token");
+    localStorage.removeItem("username");
+    window.location.hash = "#/";
+  }
   if (!res.ok) {
     let detail = "Request failed";
     try {
@@ -31,6 +39,15 @@ export const api = {
   // Auth
   register: (data) => request("/register", { method: "POST", body: JSON.stringify(data) }),
   login: (data) => request("/login", { method: "POST", body: JSON.stringify(data) }),
+  logout: () => request("/logout", { method: "POST" }),
+  me: () => request("/me"),
+
+  // Presence
+  online: () => request("/online"),
+
+  // Notifications
+  getNotifications: () => request("/notifications"),
+  markNotificationsRead: () => request("/notifications/read", { method: "POST" }),
 
   // Posts
   getPosts: () => request("/posts"),

@@ -1,0 +1,22 @@
+# Render blueprint — Zone Media backend (FastAPI + SQLite + WebSockets)
+# Free tier supports WebSockets and a persistent disk for SQLite.
+# 1. Push the repo to GitHub.
+# 2. In Render dashboard: "New" -> "Blueprint" -> pick this repo.
+#    Render detects this render.yaml and provisions the service automatically.
+# 3. After first deploy, copy the assigned HTTPS URL (e.g. https://zone-media-api.onrender.com).
+
+services:
+  - type: web
+    name: zone-media-api
+    runtime: python
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: ZONE_DATA_DIR
+        value: /data
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "python backend/seed.py && uvicorn app:app --app-dir backend --host 0.0.0.0 --port $PORT"
+    disk:
+      name: sqlite-data
+      mountPath: /data
+      sizeGB: 1

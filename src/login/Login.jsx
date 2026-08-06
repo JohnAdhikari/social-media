@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
 import api from "../api";
+import { connect as connectRealtime } from "../realtime";
 
 function Login() {
   const [username, setUsername] = useState("");
@@ -44,6 +45,8 @@ function Login() {
         password,
       });
       localStorage.setItem("username", user.username);
+      localStorage.setItem("zone_token", user.token);
+      connectRealtime(user.username);
       navigate("/homepage");
     } catch (err) {
       setError(err.message || "Login failed. Check your credentials.");
@@ -52,9 +55,23 @@ function Login() {
     }
   }
 
-  function handleDemoLogin() {
-    localStorage.setItem("username", "John Adhikari");
-    navigate("/homepage");
+  async function handleDemoLogin() {
+    setLoading(true);
+    setError("");
+    try {
+      const user = await api.login({
+        username_or_email: "John Adhikari",
+        password: "demo1234",
+      });
+      localStorage.setItem("username", user.username);
+      localStorage.setItem("zone_token", user.token);
+      connectRealtime(user.username);
+      navigate("/homepage");
+    } catch (err) {
+      setError(err.message || "Demo account unavailable. Please sign up instead.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

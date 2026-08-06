@@ -3,6 +3,7 @@ import logo from "../assets/logo.png";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import api from "../api";
+import { connect as connectRealtime } from "../realtime";
 
 function SignUp() {
   const [firstName, setFirstName] = useState("");
@@ -30,6 +31,8 @@ function SignUp() {
         password,
       });
       localStorage.setItem("username", user.username);
+      localStorage.setItem("zone_token", user.token);
+      connectRealtime(user.username);
       navigate("/homepage");
     } catch (err) {
       setError(err.message || "Registration failed. Try again.");

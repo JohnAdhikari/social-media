@@ -2,6 +2,8 @@
 import { Link, useParams } from "react-router-dom";
 import pfp from "../assets/pfp.png";
 import api from "../api";
+import { connect as connectRealtime, onRealTime, send } from "../realtime";
+import usePresence from "../hooks/usePresence";
 import "./messages.css";
 
 function Messages() {
@@ -14,7 +16,10 @@ function Messages() {
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [typing, setTyping] = useState(false);
   const threadEndRef = useRef(null);
+  const typingTimer = useRef(null);
+  const { isOnline } = usePresence();
 
   async function loadConversations() {
     try {
@@ -25,12 +30,14 @@ function Messages() {
     }
   }
 
-  async function openThread(otherUser) {
+  function openThread(otherUser) {
     setActiveUser(otherUser);
   }
 
   useEffect(() => {
     loadConversations();
+    connectRealtime(username);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -47,45 +54,40 @@ function Messages() {
     };
   }, [activeUser]);
 
-useEffect(() => {
+  useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread]);
 
   // Live updates via WebSocket — replaces the 5s polling we used before.
   useEffect(() => {
     if (!activeUser) return;
-    let ws;
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    try {
-      ws = new WebSocket(`${proto}://${window.location.host}/ws/${encodeURIComponent(username)}`);
-    } catch {
-      return;
-    }
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type !== "message") return;
+    const off = onRealTime((data) => {
+      if (data.type === "message") {
         const m = data.message;
-        // Only append if it belongs to this thread
         if (m.from_user === activeUser) {
-          setThread((t) =>
-            t.some((x) => x.id === m.id) ? t : [...t, m]
-          );
+          setThread((t) => (t.some((x) => x.id === m.id) ? t : [...t, m]));
         }
         loadConversations();
-      } catch {
-        /* ignore malformed frames */
+      } else if (data.type === "typing" && data.from === activeUser) {
+        setTyping(Boolean(data.typing));
+        clearTimeout(typingTimer.current);
+        typingTimer.current = setTimeout(() => setTyping(false), 3000);
+      } else if (data.type === "read" && data.from === activeUser) {
+        // The other user read our messages — reflect it on our sent bubbles
+        setThread((t) => t.map((m) => (m.from_user === username ? { ...m, read: true } : m)));
       }
-    };
+    });
     return () => {
-      try {
-        ws.close();
-      } catch {
-        /* ignore */
-      }
+      off();
+      clearTimeout(typingTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser]);
+
+  function notifyTyping(active) {
+    if (!activeUser) return;
+    send({ type: "typing", to: activeUser, active });
+  }
 
   async function handleSend(e) {
     e.preventDefault();
@@ -95,6 +97,7 @@ useEffect(() => {
       const msg = await api.sendMessage(activeUser, draft.trim());
       setThread((t) => [...t, msg]);
       setDraft("");
+      notifyTyping(false);
       await loadConversations();
     } finally {
       setSending(false);
@@ -128,7 +131,7 @@ useEffect(() => {
               >
                 <div className="conversation-avatar-wrap">
                   <img src={pfp} alt={c.username} className="conversation-avatar" />
-                  {c.is_friend && <span className="contact-online-dot"></span>}
+                  {isOnline(c.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
                 </div>
                 <div className="conversation-info">
                   <div className="conversation-name-row">
@@ -156,12 +159,14 @@ useEffect(() => {
             </div>
           ) : (
             <>
-              <div className="thread-head">
+<div className="thread-head">
                 <div className="thread-head-user">
                   <img src={pfp} alt={other?.username} className="thread-head-avatar" />
                   <div>
                     <span className="thread-head-name">{other?.username}</span>
-                    <span className="thread-head-bio">{other?.bio || "Zone Media user"}</span>
+                    <span className={`thread-head-bio ${typing ? "typing" : ""}`}>
+                      {typing ? "typing..." : isOnline(activeUser) ? "Online" : other?.bio || "Zone Media user"}
+                    </span>
                   </div>
                 </div>
                 <Link to={`/profile/${encodeURIComponent(activeUser)}`} className="thread-view-profile">
@@ -175,12 +180,17 @@ useEffect(() => {
                     <p>Say hello to {activeUser}!</p>
                   </div>
                 ) : (
-                  thread.map((m) => (
+thread.map((m) => (
                     <div key={m.id} className={`message-bubble ${m.from_user === username ? "mine" : ""}`}>
                       <span className="message-text">{m.text}</span>
                       <span className="message-time">
                         {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
+                      {m.from_user === username && (
+                        <span className={`message-read-tick ${m.read ? "read" : ""}`} title={m.read ? "Read" : "Sent"}>
+                          {m.read ? "✓✓" : "✓"}
+                        </span>
+                      )}
                     </div>
                   ))
                 )}
@@ -188,12 +198,15 @@ useEffect(() => {
               </div>
 
               <form className="thread-composer" onSubmit={handleSend}>
-                <input
+<input
                   type="text"
                   className="thread-input"
                   placeholder={`Message ${activeUser}...`}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onChange={(e) => {
+                    setDraft(e.target.value);
+                    notifyTyping(true);
+                  }}
                 />
                 <button type="submit" className="thread-send btn-primary" disabled={!draft.trim() || sending}>
                   Send

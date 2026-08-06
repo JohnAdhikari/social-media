@@ -139,6 +139,18 @@
   border-radius: 50%;
 }
 
+.contact-offline-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--text-subtle);
+  border: 2px solid var(--online-dot-border);
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
 .contact-info {
   display: flex;
   flex-direction: column;

@@ -3,6 +3,7 @@ import "./contact.css";
 import pfp from "../../assets/pfp.png";
 import api from "../../api";
 import useGsapReveal from "../../hooks/useGsapReveal";
+import usePresence from "../../hooks/usePresence";
 
 const TRENDS = [
   { tag: "#AIagents", posts: "14.2k posts" },
@@ -21,6 +22,7 @@ function Contact() {
   const [busy, setBusy] = useState(false);
   const rootRef = useRef(null);
   useGsapReveal(rootRef, { y: 24, stagger: 0.06 });
+  const { isOnline } = usePresence();
 
   async function load() {
     try {
@@ -123,7 +125,7 @@ function Contact() {
               <div key={f.username} className="contact-item">
                 <div className="contact-avatar-wrapper">
                   <img src={pfp} alt={f.username} className="contact-avatar" />
-                  <span className="contact-online-dot"></span>
+                  {isOnline(f.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
                 </div>
                 <div className="contact-info">
                   <span className="contact-name">{f.username}</span>

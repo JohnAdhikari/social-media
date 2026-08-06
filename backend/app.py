@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+import os
 import secrets
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -16,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.environ.get("ZONE_DATA_DIR", BASE_DIR / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "social.db"
 
@@ -42,13 +44,23 @@ class ConnectionManager:
 
     async def connect(self, username: str, ws: WebSocket) -> None:
         await ws.accept()
+        was_online = self.is_online(username)
         with self._lock:
             # One connection per user; drop the old one if present
             self.active[username] = ws
+        return not was_online
 
     def disconnect(self, username: str) -> None:
         with self._lock:
             self.active.pop(username, None)
+
+    def is_online(self, username: str) -> bool:
+        with self._lock:
+            return username in self.active
+
+    def online_users(self) -> List[str]:
+        with self._lock:
+            return list(self.active.keys())
 
     async def notify(self, username: str, event: dict) -> None:
         with self._lock:
@@ -59,6 +71,15 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(username)
 
+    async def broadcast(self, event: dict) -> None:
+        with self._lock:
+            targets = list(self.active.values())
+        for ws in targets:
+            try:
+                await ws.send_json(event)
+            except Exception:
+                pass
+
 
 manager = ConnectionManager()
 
@@ -66,14 +87,43 @@ manager = ConnectionManager()
 @app.websocket("/ws/{username}")
 async def websocket_endpoint(ws: WebSocket, username: str) -> None:
     await manager.connect(username, ws)
+    # Let everyone know a user came online
+    await manager.broadcast({"type": "presence", "usernames": manager.online_users()})
     try:
         while True:
-            # Keep the socket open; clients use REST to send, WS to receive.
-            await ws.receive_text()
+            raw = await ws.receive_text()
+            if not raw:
+                continue
+            try:
+                data = json.loads(raw)
+            except Exception:
+                continue
+            etype = data.get("type")
+            if etype == "typing":
+                target = data.get("to")
+                if target:
+                    await manager.notify(target, {
+                        "type": "typing",
+                        "from": username,
+                        "to": target,
+                        "typing": bool(data.get("active", True)),
+                    })
+            elif etype == "read":
+                target = data.get("to")
+                if target:
+                    await manager.notify(target, {
+                        "type": "read",
+                        "from": username,
+                        "to": target,
+                    })
     except WebSocketDisconnect:
-        manager.disconnect(username)
+        pass
     except Exception:
+        pass
+    finally:
         manager.disconnect(username)
+        await manager.broadcast({"type": "presence", "usernames": manager.online_users()})
+
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -126,8 +176,43 @@ def hash_password(password: str, salt: str) -> str:
     return hmac.new(salt.encode(), password.encode(), hashlib.sha256).hexdigest()
 
 
-def get_author(author: Optional[str] = Header(default=None)) -> str:
-    return (author or "Guest").strip() or "Guest"
+def issue_token() -> str:
+    return secrets.token_hex(24)
+
+
+def get_author(authorization: Optional[str] = Header(default=None)) -> str:
+    """Resolve the authenticated user from a Bearer token."""
+    token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT username FROM sessions WHERE token = ? AND expires_at > ?",
+            (token, now_iso()),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+    return row["username"]
+
+
+def _issue_session(conn, username: str) -> str:
+    token = issue_token()
+    expires = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    conn.execute(
+        "INSERT INTO sessions (token, username, created_at, expires_at) VALUES (?, ?, ?, ?)",
+        (token, username, now_iso(), expires),
+    )
+    return token
+
+
+def _notify_db(conn, username: str, ntype: str, actor: str, post_id: Optional[int] = None, text: Optional[str] = None) -> None:
+    conn.execute(
+        "INSERT INTO notifications (username, type, actor, post_id, text, read, created_at) "
+        "VALUES (?, ?, ?, ?, ?, 0, ?)",
+        (username, ntype, actor, post_id, text, now_iso()),
+    )
 
 
 def init_db() -> None:
@@ -141,6 +226,13 @@ def init_db() -> None:
                 password_hash TEXT NOT NULL,
                 bio TEXT DEFAULT 'Welcome to my Zone Media profile!',
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS posts (
@@ -184,6 +276,17 @@ def init_db() -> None:
                 from_user TEXT NOT NULL,
                 to_user TEXT NOT NULL,
                 text TEXT NOT NULL,
+                read INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL,
+                type TEXT NOT NULL,
+                actor TEXT NOT NULL,
+                post_id INTEGER,
+                text TEXT,
                 read INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             );
@@ -235,11 +338,14 @@ def register(payload: RegisterRequest) -> dict:
                 "INSERT INTO users (username, email, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
                 (username, email, salt, hash_password(payload.password, salt), now_iso()),
             )
+            token = _issue_session(conn, username)
             conn.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(status_code=409, detail="Username or email already exists")
         row = conn.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
-    return _public_user(row)
+    result = _public_user(row)
+    result["token"] = token
+    return result
 
 
 @app.post("/api/login")
@@ -254,8 +360,90 @@ def login(payload: LoginRequest) -> dict:
         raise HTTPException(status_code=401, detail="Invalid username or password")
     if not hmac.compare_digest(hash_password(payload.password, row["password_salt"]), row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    return _public_user(row)
+    with connect() as conn:
+        token = _issue_session(conn, row["username"])
+        conn.commit()
+    result = _public_user(row)
+    result["token"] = token
+    return result
 
+
+@app.post("/api/logout")
+def logout(author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        conn.execute(
+            "DELETE FROM sessions WHERE username = ?",
+            (author,),
+        )
+        conn.commit()
+    return {"status": "success"}
+
+
+@app.get("/api/me")
+def me(author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (author,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = _public_user(row)
+    user["post_count"] = _post_count(conn, author)
+    user["friend_count"] = len(_friend_names(conn, author))
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Online presence
+# ---------------------------------------------------------------------------
+
+@app.get("/api/online")
+def online(author: str = Depends(get_author)) -> dict:
+    return {"usernames": manager.online_users()}
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+def _serialize_notification(row) -> dict:
+    return {
+        "id": row["id"],
+        "type": row["type"],
+        "actor": row["actor"],
+        "post_id": row["post_id"],
+        "text": row["text"],
+        "read": bool(row["read"]),
+        "created_at": row["created_at"],
+    }
+
+
+@app.get("/api/notifications")
+def get_notifications(author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE username = ? ORDER BY id DESC LIMIT 50",
+            (author,),
+        ).fetchall()
+        unread = conn.execute(
+            "SELECT COUNT(*) AS c FROM notifications WHERE username = ? AND read = 0",
+            (author,),
+        ).fetchone()
+    return {
+        "items": [_serialize_notification(r) for r in rows],
+        "unread": unread["c"] if unread else 0,
+    }
+
+
+@app.post("/api/notifications/read")
+def mark_notifications_read(author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        conn.execute("UPDATE notifications SET read = 1 WHERE username = ?", (author,))
+        conn.commit()
+    return {"status": "success"}
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
 
 @app.get("/api/users/search")
 def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
@@ -393,19 +581,24 @@ def delete_post(post_id: int, author: str = Depends(get_author)) -> dict:
 
 
 @app.post("/api/posts/{post_id}/like")
-def like_post(post_id: int) -> dict:
+async def like_post(post_id: int, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Post not found")
         conn.execute("UPDATE posts SET likes = likes + 1 WHERE id = ?", (post_id,))
+        if row["username"] != author:
+            _notify_db(conn, row["username"], "like", author, post_id=post_id)
         conn.commit()
+        post_owner = row["username"]
         updated = conn.execute("SELECT likes FROM posts WHERE id = ?", (post_id,)).fetchone()
+    if post_owner != author:
+        await manager.notify(post_owner, {"type": "like", "actor": author, "post_id": post_id})
     return {"status": "success", "id": post_id, "likes": updated["likes"]}
 
 
 @app.post("/api/posts/{post_id}/comments", status_code=201)
-def add_comment(post_id: int, payload: CommentCreate, author: str = Depends(get_author)) -> dict:
+async def add_comment(post_id: int, payload: CommentCreate, author: str = Depends(get_author)) -> dict:
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Comment cannot be empty")
     with connect() as conn:
@@ -416,8 +609,13 @@ def add_comment(post_id: int, payload: CommentCreate, author: str = Depends(get_
             "INSERT INTO comments (post_id, username, text, created_at) VALUES (?, ?, ?, ?)",
             (post_id, author, payload.text.strip(), now_iso()),
         )
+        if row["username"] != author:
+            _notify_db(conn, row["username"], "comment", author, post_id=post_id, text=payload.text.strip())
         conn.commit()
         comment = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        post_owner = row["username"]
+    if post_owner != author:
+        await manager.notify(post_owner, {"type": "comment", "actor": author, "post_id": post_id})
     return dict(comment)
 
 
@@ -478,7 +676,7 @@ def get_friends(author: str = Depends(get_author)) -> dict:
 
 
 @app.post("/api/friends/request", status_code=201)
-def send_friend_request(payload: FriendRequestCreate, author: str = Depends(get_author)) -> dict:
+async def send_friend_request(payload: FriendRequestCreate, author: str = Depends(get_author)) -> dict:
     to_user = payload.to_user.strip()
     if to_user == author:
         raise HTTPException(status_code=400, detail="You cannot friend yourself")
@@ -506,12 +704,14 @@ def send_friend_request(payload: FriendRequestCreate, author: str = Depends(get_
             "INSERT INTO friend_requests (from_user, to_user, status, created_at) VALUES (?, ?, 'pending', ?)",
             (author, to_user, now_iso()),
         )
+        _notify_db(conn, to_user, "friend_request", author)
         conn.commit()
+    await manager.notify(to_user, {"type": "friend_request", "actor": author})
     return {"status": "success", "from_user": author, "to_user": to_user}
 
 
 @app.post("/api/friends/respond")
-def respond_friend_request(payload: FriendRespond, author: str = Depends(get_author)) -> dict:
+async def respond_friend_request(payload: FriendRespond, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute(
             "SELECT * FROM friend_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
@@ -527,9 +727,13 @@ def respond_friend_request(payload: FriendRespond, author: str = Depends(get_aut
             conn.execute(
                 "UPDATE friend_requests SET status = 'accepted' WHERE id = ?", (row["id"],)
             )
+            _notify_db(conn, payload.from_user, "friend_accept", author)
+            conn.commit()
         else:
             conn.execute("DELETE FROM friend_requests WHERE id = ?", (row["id"],))
-        conn.commit()
+            conn.commit()
+    if payload.accept:
+        await manager.notify(payload.from_user, {"type": "friend_accept", "actor": author})
     return {"status": "success", "accepted": payload.accept}
 
 
@@ -599,7 +803,7 @@ def get_conversations(author: str = Depends(get_author)) -> List[dict]:
 
 
 @app.get("/api/messages/{other_user}")
-def get_thread(other_user: str, author: str = Depends(get_author)) -> dict:
+async def get_thread(other_user: str, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         # Mark messages to author as read
         conn.execute(
@@ -618,7 +822,9 @@ def get_thread(other_user: str, author: str = Depends(get_author)) -> dict:
             "bio": other["bio"] if other else "",
             "post_count": _post_count(conn, other_user) if other else 0,
         }
-        return {"other": other_profile, "messages": [_serialize_message(r) for r in rows]}
+    # Let the sender know their messages were read
+    await manager.notify(other_user, {"type": "read", "from": author, "to": other_user})
+    return {"other": other_profile, "messages": [_serialize_message(r) for r in rows]}
 
 
 @app.post("/api/messages/{other_user}", status_code=201)
