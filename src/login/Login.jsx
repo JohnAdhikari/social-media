@@ -1,7 +1,8 @@
 import "./login.css";
 import logo from "../assets/logo.png";
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { gsap } from "gsap";
 
 function Login() {
   const [username, setUsername] = useState("");
@@ -9,6 +10,23 @@ function Login() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const ctx = gsap.context(() => {
+      gsap.from(el.querySelectorAll("[data-reveal]"), {
+        y: 24,
+        autoAlpha: 0,
+        duration: 0.7,
+        ease: "power3.out",
+        stagger: 0.08,
+      });
+    }, el);
+    return () => ctx.revert();
+  }, []);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -26,12 +44,12 @@ function Login() {
   }
 
   return (
-    <div className="login-container">
+    <div className="login-container" ref={rootRef}>
       <div className="login-backdrop-glow glow-1"></div>
       <div className="login-backdrop-glow glow-2"></div>
 
       <div className="login-content-wrapper glass-panel">
-        <div className="login-brand-section">
+        <div className="login-brand-section" data-reveal>
           <div className="logo-badge">
             <img className="img-logo" src={logo} alt="Zone Logo" />
             <h1 className="brand-title">Zone<span className="brand-accent">Media</span></h1>
@@ -42,7 +60,7 @@ function Login() {
           </p>
         </div>
 
-        <div className="login-form-section">
+        <div className="login-form-section" data-reveal>
           <div className="form-header">
             <h2>Welcome Back</h2>
             <p>Sign in to your account to continue</p>
