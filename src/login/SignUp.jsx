@@ -2,6 +2,7 @@ import "./signUp.css";
 import logo from "../assets/logo.png";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import api from "../api";
 
 function SignUp() {
   const [firstName, setFirstName] = useState("");
@@ -9,13 +10,32 @@ function SignUp() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [gender, setGender] = useState("Male");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  function handleSignUp(e) {
+  async function handleSignUp(e) {
     e.preventDefault();
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
+      return;
+    }
+    setLoading(true);
+    setError("");
     const fullName = `${firstName} ${lastName}`.trim() || email.split("@")[0] || "User";
-    localStorage.setItem("username", fullName);
-    navigate("/homepage");
+    try {
+      const user = await api.register({
+        username: fullName,
+        email,
+        password,
+      });
+      localStorage.setItem("username", user.username);
+      navigate("/homepage");
+    } catch (err) {
+      setError(err.message || "Registration failed. Try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -35,6 +55,8 @@ function SignUp() {
         </div>
 
         <form className="signup-form" onSubmit={handleSignUp}>
+          {error && <div className="login-error-alert">{error}</div>}
+
           <div className="name-row">
             <div className="input-group">
               <label>First name</label>
@@ -137,8 +159,8 @@ function SignUp() {
             </div>
           </div>
 
-          <button type="submit" className="signup-btn btn-primary">
-            Create Free Account
+          <button type="submit" className="signup-btn btn-primary" disabled={loading}>
+            {loading ? "Creating account..." : "Create Free Account"}
           </button>
 
           <p className="message">

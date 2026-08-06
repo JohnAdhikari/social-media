@@ -29,6 +29,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
 class RegisterRequest(BaseModel):
     username: str
     email: str
@@ -46,10 +50,29 @@ class PostCreate(BaseModel):
 class CommentCreate(BaseModel):
     text: str
 
+
+# ---------------------------------------------------------------------------
+# Database helpers
+# ---------------------------------------------------------------------------
+
 def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def hash_password(password: str, salt: str) -> str:
+    return hmac.new(salt.encode(), password.encode(), hashlib.sha256).hexdigest()
+
+
+def get_author(author: Optional[str] = Header(default=None)) -> str:
+    return (author or "Guest").strip() or "Guest"
+
 
 def init_db() -> None:
     with connect() as conn:
@@ -85,53 +108,160 @@ def init_db() -> None:
         """)
         conn.commit()
 
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
+
+
+# ---------------------------------------------------------------------------
+# Health
+# ---------------------------------------------------------------------------
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+def _public_user(row) -> dict:
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "email": row["email"],
+        "bio": row["bio"],
+        "created_at": row["created_at"],
+    }
+
+
+@app.post("/api/register", status_code=201)
+def register(payload: RegisterRequest) -> dict:
+    username = payload.username.strip()
+    email = payload.email.strip().lower()
+    if not username or not email or not payload.password:
+        raise HTTPException(status_code=400, detail="All fields are required")
+    if len(payload.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    salt = secrets.token_hex(16)
+    with connect() as conn:
+        try:
+            cursor = conn.execute(
+                "INSERT INTO users (username, email, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+                (username, email, salt, hash_password(payload.password, salt), now_iso()),
+            )
+            conn.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Username or email already exists")
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return _public_user(row)
+
+
+@app.post("/api/login")
+def login(payload: LoginRequest) -> dict:
+    key = payload.username_or_email.strip()
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE username = ? OR email = ?",
+            (key, key.lower()),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    if not hmac.compare_digest(hash_password(payload.password, row["password_salt"]), row["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    return _public_user(row)
+
+
+@app.get("/api/users/{username}")
+def get_user(username: str) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return _public_user(row)
+
+
+# ---------------------------------------------------------------------------
+# Posts
+# ---------------------------------------------------------------------------
+
+def _serialize_post(row, conn) -> dict:
+    comments = conn.execute(
+        "SELECT * FROM comments WHERE post_id = ? ORDER BY id ASC", (row["id"],)
+    ).fetchall()
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "text": row["text"],
+        "picture": row["picture"],
+        "category": row["category"],
+        "likes": row["likes"],
+        "created_at": row["created_at"],
+        "comments": [dict(c) for c in comments],
+    }
+
+
 @app.get("/api/posts")
 def get_posts() -> List[dict]:
     with connect() as conn:
         posts = conn.execute("SELECT * FROM posts ORDER BY id DESC").fetchall()
-        result = []
-        for p in posts:
-            post_dict = dict(p)
-            comments = conn.execute("SELECT * FROM comments WHERE post_id = ? ORDER BY id ASC", (p["id"],)).fetchall()
-            post_dict["comments"] = [dict(c) for c in comments]
-            result.append(post_dict)
-        return result
+        return [_serialize_post(p, conn) for p in posts]
 
-@app.post("/api/posts")
-def create_post(payload: PostCreate, author: str = "Guest") -> dict:
-    created_at = datetime.now(timezone.utc).isoformat()
+
+@app.post("/api/posts", status_code=201)
+def create_post(payload: PostCreate, author: str = Depends(get_author)) -> dict:
+    if not payload.text.strip():
+        raise HTTPException(status_code=400, detail="Post text cannot be empty")
     with connect() as conn:
         cursor = conn.execute(
             "INSERT INTO posts (username, text, picture, category, likes, created_at) VALUES (?, ?, ?, ?, 0, ?)",
-            (author, payload.text, payload.picture, payload.category, created_at)
+            (author, payload.text.strip(), payload.picture, payload.category, now_iso()),
         )
         conn.commit()
-        post_id = cursor.lastrowid
-    return {"id": post_id, "username": author, **payload.model_dump(), "likes": 0, "comments": [], "timestamp": "Just now"}
+        row = conn.execute("SELECT * FROM posts WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        return _serialize_post(row, conn)
+
+
+@app.delete("/api/posts/{post_id}", status_code=200)
+def delete_post(post_id: int, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found")
+        if row["username"] != author:
+            raise HTTPException(status_code=403, detail="You can only delete your own posts")
+        conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))
+        conn.commit()
+    return {"status": "success", "id": post_id}
+
 
 @app.post("/api/posts/{post_id}/like")
 def like_post(post_id: int) -> dict:
     with connect() as conn:
+        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found")
         conn.execute("UPDATE posts SET likes = likes + 1 WHERE id = ?", (post_id,))
         conn.commit()
-    return {"status": "success"}
+        updated = conn.execute("SELECT likes FROM posts WHERE id = ?", (post_id,)).fetchone()
+    return {"status": "success", "id": post_id, "likes": updated["likes"]}
 
-@app.post("/api/posts/{post_id}/comments")
-def add_comment(post_id: int, payload: CommentCreate, author: str = "Guest") -> dict:
-    created_at = datetime.now(timezone.utc).isoformat()
+
+@app.post("/api/posts/{post_id}/comments", status_code=201)
+def add_comment(post_id: int, payload: CommentCreate, author: str = Depends(get_author)) -> dict:
+    if not payload.text.strip():
+        raise HTTPException(status_code=400, detail="Comment cannot be empty")
     with connect() as conn:
+        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Post not found")
         cursor = conn.execute(
             "INSERT INTO comments (post_id, username, text, created_at) VALUES (?, ?, ?, ?)",
-            (post_id, author, payload.text, created_at)
+            (post_id, author, payload.text.strip(), now_iso()),
         )
         conn.commit()
-        comment_id = cursor.lastrowid
-    return {"id": comment_id, "post_id": post_id, "username": author, "text": payload.text}
+        comment = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return dict(comment)

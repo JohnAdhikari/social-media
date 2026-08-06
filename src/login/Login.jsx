@@ -3,11 +3,13 @@ import logo from "../assets/logo.png";
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { gsap } from "gsap";
+import api from "../api";
 
 function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const rootRef = useRef(null);
@@ -28,14 +30,26 @@ function Login() {
     return () => ctx.revert();
   }, []);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    if (!username.trim()) {
-      setError("Please enter a valid username");
+    if (!username.trim() || !password) {
+      setError("Please enter your username and password");
       return;
     }
-    localStorage.setItem("username", username.trim());
-    navigate("/homepage");
+    setLoading(true);
+    setError("");
+    try {
+      const user = await api.login({
+        username_or_email: username.trim(),
+        password,
+      });
+      localStorage.setItem("username", user.username);
+      navigate("/homepage");
+    } catch (err) {
+      setError(err.message || "Login failed. Check your credentials.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleDemoLogin() {
@@ -106,8 +120,8 @@ function Login() {
               </div>
             </div>
 
-            <button type="submit" className="login-btn btn-primary">
-              Log In
+            <button type="submit" className="login-btn btn-primary" disabled={loading}>
+              {loading ? "Signing in..." : "Log In"}
             </button>
 
             <button

@@ -1,48 +1,36 @@
 import { useState, useEffect, useRef } from "react";
 import pfp from "../../assets/pfp.png";
 import imageIcon from "../../assets/image.png";
+import api from "../../api";
 import useGsapReveal from "../../hooks/useGsapReveal";
 import "./displayposts.css";
 
-const INITIAL_POSTS = [
-  {
-    id: 1,
-    username: "Alex Rivera",
+// Map a backend post to the shape the UI expects.
+function mapPost(p) {
+  return {
+    id: p.id,
+    username: p.username,
     avatar: pfp,
-    text: "🚀 Just launched our new AI Agent dashboard built with React 19 & FastAPI! Super clean glassmorphism UI and lightning-fast performance.",
-    picture: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=800&q=80",
-    category: "AI & Tech",
-    likes: 24,
+    text: p.text,
+    picture: p.picture,
+    category: p.category,
+    likes: p.likes,
     isLiked: false,
-    comments: [
-      { id: 101, username: "Sarah Chen", text: "Looks incredible! Love the glow effects 🔥" },
-      { id: 102, username: "John Adhikari", text: "Awesome work team!" }
-    ],
-    timestamp: "15 mins ago"
-  },
-  {
-    id: 2,
-    username: "Emily Taylor",
-    avatar: pfp,
-    text: "Spent the weekend exploring modern CSS custom properties and responsive grid systems. The web design ecosystem is evolving so fast! 🎨✨",
-    picture: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?auto=format&fit=crop&w=800&q=80",
-    category: "Design",
-    likes: 42,
-    isLiked: true,
-    comments: [
-      { id: 103, username: "David Kim", text: "What color palette did you use here?" }
-    ],
-    timestamp: "2 hours ago"
-  }
-];
+    comments: (p.comments || []).map((c) => ({
+      id: c.id,
+      username: c.username,
+      text: c.text,
+    })),
+    timestamp: "recent",
+  };
+}
 
 function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
-  const username = localStorage.getItem("username") || "John Adhikari";
+  const username = localStorage.getItem("username") || "Guest";
 
-  const [posts, setPosts] = useState(() => {
-    const saved = localStorage.getItem("zone_posts");
-    return saved ? JSON.parse(saved) : INITIAL_POSTS;
-  });
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const [inputText, setInputText] = useState("");
   const [picture, setPicture] = useState(null);
@@ -53,9 +41,22 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
   const feedRef = useRef(null);
   useGsapReveal(feedRef, { y: 28, stagger: 0.09 });
 
+  async function loadPosts() {
+    try {
+      setLoading(true);
+      setError("");
+      const data = await api.getPosts();
+      setPosts(data.map(mapPost));
+    } catch (e) {
+      setError(e.message || "Could not load posts");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    localStorage.setItem("zone_posts", JSON.stringify(posts));
-  }, [posts]);
+    loadPosts();
+  }, [activeTab]);
 
   function triggerToast(msg) {
     setToastMessage(msg);
@@ -73,77 +74,86 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
     }
   }
 
-  function handleCreatePost(e) {
+  async function handleCreatePost(e) {
     e.preventDefault();
     if (!inputText.trim() && !picture) return;
 
-    const newPost = {
-      id: Date.now(),
-      username: username,
-      avatar: pfp,
-      text: inputText.trim(),
-      picture: picture,
-      category: category,
-      likes: 0,
-      isLiked: false,
-      comments: [],
-      timestamp: "Just now"
-    };
-
-    setPosts([newPost, ...posts]);
-    setInputText("");
-    setPicture(null);
-    triggerToast("Post published to your feed!");
+    try {
+      const created = await api.createPost({
+        text: inputText.trim(),
+        picture: picture || null,
+        category,
+      });
+      setPosts([mapPost(created), ...posts]);
+      setInputText("");
+      setPicture(null);
+      triggerToast("Post published to your feed!");
+    } catch (err) {
+      triggerToast(err.message || "Could not publish post");
+    }
   }
 
-  function toggleLike(postId) {
-    setPosts(posts.map(p => {
-      if (p.id === postId) {
-        return {
-          ...p,
-          likes: p.isLiked ? p.likes - 1 : p.likes + 1,
-          isLiked: !p.isLiked
-        };
-      }
-      return p;
-    }));
+  async function toggleLike(postId) {
+    setPosts(
+      posts.map((p) =>
+        p.id === postId
+          ? { ...p, likes: p.isLiked ? p.likes - 1 : p.likes + 1, isLiked: !p.isLiked }
+          : p
+      )
+    );
+    try {
+      await api.likePost(postId);
+    } catch {
+      /* optimistic update; sync with server on next load */
+    }
   }
 
-  function handleAddComment(postId) {
+  async function handleAddComment(postId) {
     if (!commentInput.trim()) return;
+    const text = commentInput.trim();
+    try {
+      const comment = await api.addComment(postId, text);
+      setPosts(
+        posts.map((p) =>
+          p.id === postId ? { ...p, comments: [...p.comments, comment] } : p
+        )
+      );
+      setCommentInput("");
+    } catch (err) {
+      triggerToast(err.message || "Could not add comment");
+    }
+  }
 
-    setPosts(posts.map(p => {
-      if (p.id === postId) {
-        return {
-          ...p,
-          comments: [
-            ...p.comments,
-            { id: Date.now(), username: username, text: commentInput.trim() }
-          ]
-        };
+  async function handleDeletePost(postId) {
+    try {
+      await api.deletePost(postId);
+      setPosts(posts.filter((p) => p.id !== postId));
+      triggerToast("Post removed");
+    } catch (err) {
+      triggerToast(err.message || "Could not delete post");
+    }
+  }
+
+  const filteredPosts = posts.filter((post) => {
+    // Feed keeps all categories; Explore focuses on varied/non-General content
+    if (activeTab === "feed") {
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        return (
+          post.text.toLowerCase().includes(q) ||
+          post.username.toLowerCase().includes(q) ||
+          post.category.toLowerCase().includes(q)
+        );
       }
-      return p;
-    }));
-
-    setCommentInput("");
-  }
-
-  function handleDeletePost(postId) {
-    setPosts(posts.filter(p => p.id !== postId));
-    triggerToast("Post removed");
-  }
-
-  const filteredPosts = posts.filter(post => {
-    if (activeTab === "explore" && post.category === "General") {
-      // Show varied content on explore
       return true;
     }
+    if (post.category === "General") return true;
     if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase();
     return (
-      post.text.toLowerCase().includes(query) ||
-      post.username.toLowerCase().includes(query) ||
-      post.category.toLowerCase().includes(query)
+      post.text.toLowerCase().includes(q) ||
+      post.username.toLowerCase().includes(q) ||
+      post.category.toLowerCase().includes(q)
     );
   });
 
@@ -178,7 +188,7 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
         <textarea
           className="post-textarea"
           rows="3"
-          placeholder={`What's on your mind, ${username.split(' ')[0]}?`}
+          placeholder={`What's on your mind, ${username.split(" ")[0]}?`}
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
         />
@@ -218,7 +228,30 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
 
       {/* Posts Stream */}
       <div className="posts-feed" ref={feedRef}>
-        {filteredPosts.length === 0 ? (
+        {loading ? (
+          <div className="empty-feed glass-panel">
+            <div className="empty-icon" aria-hidden="true">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+              </svg>
+            </div>
+            <h3>Loading feed...</h3>
+            <p>Fetching the latest posts from the server.</p>
+          </div>
+        ) : error ? (
+          <div className="empty-feed glass-panel">
+            <div className="empty-icon" aria-hidden="true">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3>Couldn't reach the server</h3>
+            <p>{error} — is the FastAPI backend running on port 8000?</p>
+          </div>
+        ) : filteredPosts.length === 0 ? (
           <div className="empty-feed glass-panel">
             <div className="empty-icon" aria-hidden="true">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -268,13 +301,13 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
               {/* Post Footer Actions */}
               <div className="post-footer">
                 <button
-                  className={`action-button like-btn ${post.isLiked ? 'liked' : ''}`}
+                  className={`action-button like-btn ${post.isLiked ? "liked" : ""}`}
                   onClick={() => toggleLike(post.id)}
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill={post.isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2">
                     <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
                   </svg>
-                  <span>{post.likes} {post.likes === 1 ? 'Like' : 'Likes'}</span>
+                  <span>{post.likes} {post.likes === 1 ? "Like" : "Likes"}</span>
                 </button>
 
                 <button
@@ -324,7 +357,7 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
                       placeholder="Write a comment..."
                       value={commentInput}
                       onChange={(e) => setCommentInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleAddComment(post.id)}
+                      onKeyDown={(e) => e.key === "Enter" && handleAddComment(post.id)}
                     />
                     <button
                       className="send-comment-btn btn-primary"

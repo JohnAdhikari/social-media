@@ -1,0 +1,7 @@
+# Python
+__pycache__/
+*.pyc
+
+# SQLite database (generated at runtime)
+data/*.db
+data/*.db-journal
