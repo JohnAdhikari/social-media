@@ -50,6 +50,13 @@ class PostCreate(BaseModel):
 class CommentCreate(BaseModel):
     text: str
 
+class FriendRequestCreate(BaseModel):
+    to_user: str
+
+class FriendRespond(BaseModel):
+    from_user: str
+    accept: bool
+
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -104,6 +111,23 @@ def init_db() -> None:
                 text TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (post_id) REFERENCES posts (id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS friend_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_user TEXT NOT NULL,
+                to_user TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                UNIQUE (from_user, to_user)
+            );
+
+            CREATE TABLE IF NOT EXISTS friends (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_a TEXT NOT NULL,
+                user_b TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (user_a, user_b)
             );
         """)
         conn.commit()
@@ -173,6 +197,34 @@ def login(payload: LoginRequest) -> dict:
     if not hmac.compare_digest(hash_password(payload.password, row["password_salt"]), row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     return _public_user(row)
+
+
+@app.get("/api/users/search")
+def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
+    with connect() as conn:
+        if q.strip():
+            like = f"%{q.strip()}%"
+            rows = conn.execute(
+                "SELECT * FROM users WHERE username LIKE ? OR email LIKE ? ORDER BY username LIMIT 20",
+                (like, like),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM users ORDER BY username LIMIT 20").fetchall()
+        friends = _friend_names(conn, author)
+        pending_in = set(_incoming_requests(conn, author))
+        pending_out = set(_sent_requests(conn, author))
+        result = []
+        for r in rows:
+            name = r["username"]
+            if name == author:
+                continue
+            status = "friends" if name in friends else (
+                "incoming" if name in pending_in else (
+                    "outgoing" if name in pending_out else "none"
+                )
+            )
+            result.append({"username": name, "email": r["email"], "bio": r["bio"], "status": status})
+        return result
 
 
 @app.get("/api/users/{username}")
@@ -265,3 +317,116 @@ def add_comment(post_id: int, payload: CommentCreate, author: str = Depends(get_
         conn.commit()
         comment = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,)).fetchone()
     return dict(comment)
+
+
+# ---------------------------------------------------------------------------
+# Friends
+# ---------------------------------------------------------------------------
+
+def _friend_names(conn, username: str) -> List[str]:
+    rows = conn.execute(
+        "SELECT user_a, user_b FROM friends WHERE user_a = ? OR user_b = ?",
+        (username, username),
+    ).fetchall()
+    names = set()
+    for r in rows:
+        names.add(r["user_a"] if r["user_b"] == username else r["user_b"])
+    return sorted(names)
+
+
+def _incoming_requests(conn, username: str) -> List[str]:
+    rows = conn.execute(
+        "SELECT from_user FROM friend_requests WHERE to_user = ? AND status = 'pending'",
+        (username,),
+    ).fetchall()
+    return [r["from_user"] for r in rows]
+
+
+def _sent_requests(conn, username: str) -> List[str]:
+    rows = conn.execute(
+        "SELECT to_user FROM friend_requests WHERE from_user = ? AND status = 'pending'",
+        (username,),
+    ).fetchall()
+    return [r["to_user"] for r in rows]
+
+
+@app.get("/api/friends")
+def get_friends(author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        return {
+            "friends": _friend_names(conn, author),
+            "pending_incoming": _incoming_requests(conn, author),
+            "pending_sent": _sent_requests(conn, author),
+        }
+
+
+@app.post("/api/friends/request", status_code=201)
+def send_friend_request(payload: FriendRequestCreate, author: str = Depends(get_author)) -> dict:
+    to_user = payload.to_user.strip()
+    if to_user == author:
+        raise HTTPException(status_code=400, detail="You cannot friend yourself")
+    with connect() as conn:
+        # Are they already friends?
+        friend_rows = conn.execute(
+            "SELECT id FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+            (author, to_user, to_user, author),
+        ).fetchall()
+        if friend_rows:
+            raise HTTPException(status_code=409, detail="Already friends")
+        # Existing pending request either direction?
+        dup = conn.execute(
+            "SELECT id FROM friend_requests WHERE "
+            "(from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?)",
+            (author, to_user, to_user, author),
+        ).fetchall()
+        if dup:
+            raise HTTPException(status_code=409, detail="Friend request already pending")
+        # Target must be a real user
+        target = conn.execute("SELECT id FROM users WHERE username = ?", (to_user,)).fetchone()
+        if not target:
+            raise HTTPException(status_code=404, detail="User not found")
+        conn.execute(
+            "INSERT INTO friend_requests (from_user, to_user, status, created_at) VALUES (?, ?, 'pending', ?)",
+            (author, to_user, now_iso()),
+        )
+        conn.commit()
+    return {"status": "success", "from_user": author, "to_user": to_user}
+
+
+@app.post("/api/friends/respond")
+def respond_friend_request(payload: FriendRespond, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM friend_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            (payload.from_user, author),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Request not found")
+        if payload.accept:
+            conn.execute(
+                "INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)",
+                (min(payload.from_user, author), max(payload.from_user, author), now_iso()),
+            )
+            conn.execute(
+                "UPDATE friend_requests SET status = 'accepted' WHERE id = ?", (row["id"],)
+            )
+        else:
+            conn.execute("DELETE FROM friend_requests WHERE id = ?", (row["id"],))
+        conn.commit()
+    return {"status": "success", "accepted": payload.accept}
+
+
+@app.post("/api/friends/remove")
+def remove_friend(payload: FriendRequestCreate, author: str = Depends(get_author)) -> dict:
+    other = payload.to_user.strip()
+    with connect() as conn:
+        conn.execute(
+            "DELETE FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+            (author, other, other, author),
+        )
+        conn.execute(
+            "DELETE FROM friend_requests WHERE (from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?)",
+            (author, other, other, author),
+        )
+        conn.commit()
+    return {"status": "success", "removed": other}

@@ -40,6 +40,16 @@ export const api = {
   likePost: (id) => request(`/posts/${id}/like`, { method: "POST" }),
   addComment: (id, text) =>
     request(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ text }) }),
+
+  // Friends
+  getFriends: () => request("/friends"),
+  searchUsers: (q) => request(`/users/search?q=${encodeURIComponent(q)}`),
+  sendFriendRequest: (toUser) =>
+    request("/friends/request", { method: "POST", body: JSON.stringify({ to_user: toUser }) }),
+  respondFriendRequest: (fromUser, accept) =>
+    request("/friends/respond", { method: "POST", body: JSON.stringify({ from_user: fromUser, accept }) }),
+  removeFriend: (username) =>
+    request("/friends/remove", { method: "POST", body: JSON.stringify({ to_user: username }) }),
 };
 
 export default api;

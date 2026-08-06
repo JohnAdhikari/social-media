@@ -31,6 +31,78 @@
   gap: 12px;
 }
 
+.contact-empty {
+  color: var(--text-subtle);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.request-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.accept-btn {
+  background: var(--accent-emerald);
+  border-color: var(--accent-emerald);
+  color: #fff;
+}
+.accept-btn:hover {
+  background: var(--accent-emerald);
+  color: #fff;
+}
+
+.decline-btn {
+  background: transparent;
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+.decline-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.friend-label {
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: var(--accent-emerald);
+  white-space: nowrap;
+}
+
+.sort-link {
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.discover-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
+  padding: 8px 12px;
+  border-radius: var(--radius-full);
+  color: var(--text-subtle);
+}
+.discover-input-row:focus-within {
+  border-color: var(--accent-primary);
+}
+
+.discover-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-size: 0.85rem;
+}
+
+
 .contact-item {
   display: flex;
   align-items: center;

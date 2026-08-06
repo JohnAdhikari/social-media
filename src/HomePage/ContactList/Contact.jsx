@@ -1,13 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./contact.css";
 import pfp from "../../assets/pfp.png";
-
-const CONTACTS = [
-  { id: 1, name: "Sarah Chen", role: "AI Researcher", online: true, status: "Working on LLMs 🤖" },
-  { id: 2, name: "David Kim", role: "UI Designer", online: true, status: "Designing glass UI ✨" },
-  { id: 3, name: "Marcus Vance", role: "Backend Lead", online: false, status: "Offline" },
-  { id: 4, name: "Elena Rostova", role: "Product Manager", online: true, status: "Planning v2.0 🚀" },
-];
+import api from "../../api";
+import useGsapReveal from "../../hooks/useGsapReveal";
 
 const TRENDS = [
   { tag: "#AIagents", posts: "14.2k posts" },
@@ -17,41 +12,202 @@ const TRENDS = [
 ];
 
 function Contact() {
-  const [following, setFollowing] = useState({});
+  const [friends, setFriends] = useState([]);
+  const [incoming, setIncoming] = useState([]);
+  const [discover, setDiscover] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const rootRef = useRef(null);
+  useGsapReveal(rootRef, { y: 24, stagger: 0.06 });
 
-  function toggleFollow(id) {
-    setFollowing((prev) => ({ ...prev, [id]: !prev[id] }));
+  async function load() {
+    try {
+      const data = await api.getFriends();
+      setFriends(data.friends || []);
+      setIncoming(data.pending_incoming || []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runSearch(q) {
+    setQuery(q);
+    if (!q.trim()) {
+      setDiscover([]);
+      return;
+    }
+    try {
+      const results = await api.searchUsers(q.trim());
+      setDiscover(results);
+    } catch {
+      setDiscover([]);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleAdd(username) {
+    setBusy(true);
+    try {
+      await api.sendFriendRequest(username);
+      await runSearch(query);
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRespond(fromUser, accept) {
+    setBusy(true);
+    try {
+      await api.respondFriendRequest(fromUser, accept);
+      await load();
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemove(username) {
+    setBusy(true);
+    try {
+      await api.removeFriend(username);
+      await load();
+    } catch {
+      /* ignore */
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function friendStatus(username) {
+    if (friends.includes(username)) return "friends";
+    if (discover.some((u) => u.username === username && u.status === "outgoing")) return "outgoing";
+    if (discover.some((u) => u.username === username && u.status === "incoming")) return "incoming";
+    return "none";
   }
 
   return (
-    <aside className="contact-sidebar-container">
-      {/* Active Contacts Widget */}
+    <aside className="contact-sidebar-container" ref={rootRef}>
+      {/* Friends Card */}
       <div className="contact-card glass-panel">
         <div className="contact-header">
-          <h3>Active Friends</h3>
+          <h3>Friends</h3>
           <span className="pulse-dot"></span>
         </div>
 
-        <div className="contact-list">
-          {CONTACTS.map((contact) => (
-            <div key={contact.id} className="contact-item">
-              <div className="contact-avatar-wrapper">
-                <img src={pfp} alt={contact.name} className="contact-avatar" />
-                {contact.online && <span className="contact-online-dot"></span>}
+        {loading ? (
+          <div className="contact-empty">Loading friends...</div>
+        ) : friends.length === 0 ? (
+          <div className="contact-empty">No friends yet — find someone to connect with!</div>
+        ) : (
+          <div className="contact-list">
+            {friends.map((name) => (
+              <div key={name} className="contact-item">
+                <div className="contact-avatar-wrapper">
+                  <img src={pfp} alt={name} className="contact-avatar" />
+                  <span className="contact-online-dot"></span>
+                </div>
+                <div className="contact-info">
+                  <span className="contact-name">{name}</span>
+                  <span className="contact-status">Friend</span>
+                </div>
+                <button
+                  className="follow-btn following"
+                  onClick={() => handleRemove(name)}
+                  disabled={busy}
+                >
+                  Remove
+                </button>
               </div>
-              <div className="contact-info">
-                <span className="contact-name">{contact.name}</span>
-                <span className="contact-status">{contact.status}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Friend Requests Card */}
+      {incoming.length > 0 && (
+        <div className="contact-card glass-panel">
+          <div className="contact-header">
+            <h3>Friend Requests</h3>
+            <span className="badge badge-gradient">{incoming.length}</span>
+          </div>
+          <div className="contact-list">
+            {incoming.map((name) => (
+              <div key={name} className="contact-item">
+                <div className="contact-avatar-wrapper">
+                  <img src={pfp} alt={name} className="contact-avatar" />
+                </div>
+                <div className="contact-info">
+                  <span className="contact-name">{name}</span>
+                  <span className="contact-status">wants to be your friend</span>
+                </div>
+                <div className="request-actions">
+                  <button className="follow-btn accept-btn" onClick={() => handleRespond(name, true)} disabled={busy}>
+                    Accept
+                  </button>
+                  <button className="follow-btn decline-btn" onClick={() => handleRespond(name, false)} disabled={busy}>
+                    Decline
+                  </button>
+                </div>
               </div>
-              <button
-                className={`follow-btn ${following[contact.id] ? "following" : ""}`}
-                onClick={() => toggleFollow(contact.id)}
-              >
-                {following[contact.id] ? "Following" : "+ Follow"}
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* Discover Users Card */}
+      <div className="contact-card glass-panel">
+        <div className="contact-header">
+          <h3>Find Friends</h3>
+        </div>
+        <div className="discover-input-row">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            className="discover-input"
+            placeholder="Search users..."
+            value={query}
+            onChange={(e) => runSearch(e.target.value)}
+          />
+        </div>
+
+        {discover.length > 0 && (
+          <div className="contact-list">
+            {discover.slice(0, 6).map((u) => (
+              <div key={u.username} className="contact-item">
+                <div className="contact-avatar-wrapper">
+                  <img src={pfp} alt={u.username} className="contact-avatar" />
+                </div>
+                <div className="contact-info">
+                  <span className="contact-name">{u.username}</span>
+                  <span className="contact-status">{u.bio}</span>
+                </div>
+                {friendStatus(u.username) === "friends" ? (
+                  <span className="friend-label">Friends</span>
+                ) : friendStatus(u.username) === "outgoing" ? (
+                  <span className="sort-link">Pending</span>
+                ) : friendStatus(u.username) === "incoming" ? (
+                  <button className="follow-btn" onClick={() => handleRespond(u.username, true)} disabled={busy}>
+                    Accept
+                  </button>
+                ) : (
+                  <button className="follow-btn" onClick={() => handleAdd(u.username)} disabled={busy}>
+                    Add Friend
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Trending Topics Widget */}
