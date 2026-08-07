@@ -27,11 +27,8 @@ app = FastAPI(title="Zone Media API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://JohnAdhikari.github.io",
-        "http://localhost:5173",
-        "http://localhost:5174",
-    ],
+    allow_origins=["http://localhost:5173", "http://localhost:5174"],
+    allow_origin_regex=r"(?i)^https://johnadhikari\.github\.io$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
