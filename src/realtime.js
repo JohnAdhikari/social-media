@@ -6,16 +6,16 @@ const handlers = new Set();
 let socket = null;
 let connected = false;
 let username = "";
+let token = "";
 
 function wsBase() {
-  // Allow a runtime override of the WS host (production deployment).
   if (typeof window !== "undefined" && window.ZONE_WS) return window.ZONE_WS;
   const proto = window.location.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${window.location.host}`;
 }
 
 function url() {
-  return `${wsBase()}/ws/${encodeURIComponent(username)}`;
+  return `${wsBase()}/ws?token=${encodeURIComponent(token)}`;
 }
 
 function open() {

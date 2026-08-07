@@ -106,38 +106,48 @@
 
 .profile-stats {
   display: flex;
-  align-items: center;
-  justify-content: space-around;
+  align-items: stretch;
+  justify-content: space-between;
   background: var(--bg-stats);
   border: 1px solid var(--border-glass);
-  padding: 12px 8px;
+  padding: 10px 6px;
   border-radius: var(--radius-lg);
+  overflow: hidden;
+  width: 100%;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  padding: 0 2px;
 }
 
 .stat-value {
   font-family: var(--font-heading);
   font-weight: 800;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   color: var(--text-main);
+  line-height: 1.1;
 }
 
 .stat-label {
-  font-size: 0.725rem;
+  font-size: 0.68rem;
   color: var(--text-subtle);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .stat-divider {
   width: 1px;
-  height: 24px;
+  height: 26px;
   background: var(--border-glass);
+  flex-shrink: 0;
 }
 
 .zone-ai-card {

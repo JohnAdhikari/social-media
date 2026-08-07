@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import "./aboutme.css";
 import pfp from "../../assets/pfp.png";
-import ai from "../../assets/ai.png";
+import logo from "../../assets/logo.png";
 import api from "../../api";
 
 function AboutMe() {
   const username = localStorage.getItem("username") || "John Adhikari";
   const [stats, setStats] = useState({ post_count: 0, friend_count: 0, request_count: 0 });
-  const [bio, setBio] = useState(() => localStorage.getItem("zone_user_bio") || "Full-stack developer & AI enthusiast building future web apps.");
+  const [bio, setBio] = useState(() => {
+    const stored = localStorage.getItem("zone_user_bio") || "";
+    return stored === "Full-stack developer & AI enthusiast building future web apps."
+      ? ""
+      : stored;
+  });
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
@@ -65,9 +70,10 @@ function AboutMe() {
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows="3"
+              placeholder="Your Bio"
             />
           ) : (
-            <p className="profile-bio-text">{bio}</p>
+            <p className="profile-bio-text">{bio || "Your Bio"}</p>
           )}
         </div>
 
@@ -97,7 +103,7 @@ function AboutMe() {
           className="zone-ai-card"
         >
           <div className="ai-icon-bg">
-            <img src={ai} className="ai-img" alt="Zone AI" />
+            <img src={logo} className="ai-img" alt="Zone AI" />
           </div>
           <div className="ai-card-text">
             <span className="ai-title">Zone AI Assistant</span>

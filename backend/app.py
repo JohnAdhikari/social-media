@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
+import bcrypt
 import json
 import os
 import secrets
@@ -18,7 +17,7 @@ from psycopg2.extras import RealDictCursor
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -26,7 +25,11 @@ app = FastAPI(title="Zone Media API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://JohnAdhikari.github.io",
+        "http://localhost:5173",
+        "http://localhost:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -84,10 +87,22 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@app.websocket("/ws/{username}")
-async def websocket_endpoint(ws: WebSocket, username: str) -> None:
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket, token: str = "") -> None:
+    if not token:
+        await ws.close(code=4001, reason="Missing token")
+        return
+    # Verify token against sessions table
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT username FROM sessions WHERE token = %s AND expires_at > %s",
+            (token, now_iso()),
+        ).fetchone()
+    if not row:
+        await ws.close(code=4001, reason="Invalid or expired token")
+        return
+    username = row["username"]
     await manager.connect(username, ws)
-    # Let everyone know a user came online
     await manager.broadcast({"type": "presence", "usernames": manager.online_users()})
     try:
         while True:
@@ -130,31 +145,31 @@ async def websocket_endpoint(ws: WebSocket, username: str) -> None:
 # ---------------------------------------------------------------------------
 
 class RegisterRequest(BaseModel):
-    username: str
-    email: str
-    password: str
+    username: str = Field(min_length=2, max_length=30, pattern=r'^[a-zA-Z0-9_ ]+$')
+    email: str = Field(min_length=5, max_length=254)
+    password: str = Field(min_length=8, max_length=128)
 
 class LoginRequest(BaseModel):
-    username_or_email: str
-    password: str
+    username_or_email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=128)
 
 class PostCreate(BaseModel):
-    text: str
-    picture: Optional[str] = None
-    category: str = "General"
+    text: str = Field(min_length=1, max_length=2000)
+    picture: Optional[str] = Field(default=None, max_length=2048)
+    category: str = Field(default="General", max_length=50)
 
 class CommentCreate(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=1000)
 
 class FriendRequestCreate(BaseModel):
-    to_user: str
+    to_user: str = Field(min_length=1, max_length=30)
 
 class FriendRespond(BaseModel):
-    from_user: str
+    from_user: str = Field(min_length=1, max_length=30)
     accept: bool
 
 class MessageCreate(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=2000)
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +227,13 @@ def now_iso() -> str:
 
 
 def hash_password(password: str, salt: str) -> str:
-    return hmac.new(salt.encode(), password.encode(), hashlib.sha256).hexdigest()
+    """Hash password with bcrypt. The salt param is kept for interface compat but bcrypt generates its own."""
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify password against bcrypt hash."""
+    return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
 def issue_token() -> str:
@@ -263,7 +284,7 @@ def init_db() -> None:
                 email TEXT NOT NULL UNIQUE,
                 password_salt TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
-                bio TEXT DEFAULT 'Welcome to my Zone Media profile!',
+                bio TEXT DEFAULT '',
                 created_at TEXT NOT NULL
             );
 
@@ -364,7 +385,6 @@ def _public_user(row) -> dict:
     return {
         "id": row["id"],
         "username": row["username"],
-        "email": row["email"],
         "bio": row["bio"],
         "created_at": row["created_at"],
     }
@@ -376,8 +396,8 @@ def register(payload: RegisterRequest) -> dict:
     email = payload.email.strip().lower()
     if not username or not email or not payload.password:
         raise HTTPException(status_code=400, detail="All fields are required")
-    if len(payload.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     salt = secrets.token_hex(16)
     with connect() as conn:
@@ -407,7 +427,7 @@ def login(payload: LoginRequest) -> dict:
         ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    if not hmac.compare_digest(hash_password(payload.password, row["password_salt"]), row["password_hash"]):
+    if not verify_password(payload.password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     with connect() as conn:
         token = _issue_session(conn, row["username"])
@@ -494,13 +514,19 @@ def mark_notifications_read(author: str = Depends(get_author)) -> dict:
 # Users
 # ---------------------------------------------------------------------------
 
+def _escape_like(s: str) -> str:
+    """Escape LIKE wildcards for Postgres."""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @app.get("/api/users/search")
 def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
     with connect() as conn:
         if q.strip():
-            like = f"%{q.strip()}%"
+            escaped = _escape_like(q.strip())
+            like = f"%{escaped}%"
             rows = conn.execute(
-                "SELECT * FROM users WHERE username LIKE %s OR email LIKE %s ORDER BY username LIMIT 20",
+                "SELECT * FROM users WHERE username LIKE %s ESCAPE '\\' OR email LIKE %s ESCAPE '\\' ORDER BY username LIMIT 20",
                 (like, like),
             ).fetchall()
         else:
@@ -520,7 +546,6 @@ def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
             )
             result.append({
                 "username": name,
-                "email": r["email"],
                 "bio": r["bio"],
                 "post_count": _post_count(conn, name),
                 "status": status,
@@ -555,12 +580,14 @@ def suggest_friends(author: str = Depends(get_author)) -> List[dict]:
 
 
 @app.get("/api/users/{username}")
-def get_user(username: str) -> dict:
+def get_user(username: str, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = %s", (username,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
         user = _public_user(row)
+        if author == username:
+            user["email"] = row["email"]
         user["post_count"] = _post_count(conn, username)
         user["friend_count"] = len(_friend_names(conn, username))
         return user
@@ -780,10 +807,10 @@ async def respond_friend_request(payload: FriendRespond, author: str = Depends(g
             )
             _notify_db(conn, payload.from_user, "friend_accept", author)
             conn.commit()
-            # Mark the friend_request notification as read and update it
+            # Mark the recipient's friend_request notification as read and update it
             conn.execute(
                 "UPDATE notifications SET read = 1, type = 'friend_accept', text = %s WHERE username = %s AND type = 'friend_request' AND actor = %s",
-                (f"You are now friends with {author}", payload.from_user, author),
+                (f"You are now friends with {author}", author, payload.from_user),
             )
             conn.commit()
         else:

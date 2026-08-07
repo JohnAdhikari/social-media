@@ -44,7 +44,7 @@ REQUESTER_PASSWORD = "demo1234"
 REQUESTER_BIO = "New here - looking to connect!"
 
 
-def seed_user_if_missing(conn, username: str, email: str, password: str, bio: str = "Welcome to my Zone Media profile!") -> None:
+def seed_user_if_missing(conn, username: str, email: str, password: str, bio: str = "Your Bio") -> None:
     existing = conn.execute("SELECT id FROM users WHERE username = %s", (username,)).fetchone()
     if existing:
         return

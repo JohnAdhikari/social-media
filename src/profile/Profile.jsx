@@ -88,8 +88,8 @@ function Profile() {
   }
 
   const bio = isOwn
-    ? localStorage.getItem("zone_user_bio") || "This is you. Tell people about yourself!"
-    : profile?.bio || "Zone Media user";
+    ? localStorage.getItem("zone_user_bio") || ""
+    : profile?.bio || "";
 
   return (
     <div className="profile-page">
@@ -134,7 +134,7 @@ function Profile() {
             </div>
           </div>
 
-          <p className="profile-bio">{bio}</p>
+          <p className="profile-bio">{bio || "Your Bio"}</p>
         </div>
 
         <div className="profile-stats">
