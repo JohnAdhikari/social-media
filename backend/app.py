@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import bcrypt
+import hashlib
+import hmac
 import json
 import os
 import secrets
@@ -231,9 +233,19 @@ def hash_password(password: str, salt: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against bcrypt hash."""
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+def verify_password(password: str, hashed: str, salt: str = "") -> bool:
+    """Verify password. Supports bcrypt hashes (new accounts) and the legacy
+    HMAC-SHA256 hashes (accounts created before the bcrypt migration)."""
+    if hashed.startswith("$2"):
+        try:
+            return bcrypt.checkpw(password.encode(), hashed.encode())
+        except Exception:
+            return False
+    # Legacy HMAC-SHA256 verification
+    if not salt:
+        return False
+    legacy = hmac.new(salt.encode(), password.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(legacy, hashed)
 
 
 def issue_token() -> str:
@@ -427,7 +439,7 @@ def login(payload: LoginRequest) -> dict:
         ).fetchone()
     if not row:
         raise HTTPException(status_code=401, detail="Invalid username or password")
-    if not verify_password(payload.password, row["password_hash"]):
+    if not verify_password(payload.password, row["password_hash"], row["password_salt"]):
         raise HTTPException(status_code=401, detail="Invalid username or password")
     with connect() as conn:
         token = _issue_session(conn, row["username"])

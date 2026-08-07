@@ -60,6 +60,14 @@ def seed_user_if_missing(conn, username: str, email: str, password: str, bio: st
 def seed_demo(conn) -> None:
     existing = conn.execute("SELECT id FROM users WHERE username = %s OR email = %s", (DEMO_USERNAME, DEMO_EMAIL)).fetchone()
     if existing:
+        # Re-hash the demo password to bcrypt in case it predates the migration
+        salt = secrets.token_hex(16)
+        conn.execute(
+            "UPDATE users SET password_salt = %s, password_hash = %s WHERE id = %s",
+            (salt, hash_password(DEMO_PASSWORD, salt), existing["id"]),
+        )
+        conn.commit()
+        print(f"Re-hashed demo account password: {DEMO_USERNAME}")
         return
     salt = secrets.token_hex(16)
     conn.execute(
