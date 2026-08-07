@@ -21,7 +21,10 @@
   - `ZONE_WS` does NOT include path: `wss://zone-media-api.onrender.com` (WebSocket path is `/ws/{username}`)
 - Vite dev proxy: `/api` → `http://127.0.0.1:8000` and `/ws` → `ws://127.0.0.1:8000`
 - `.env` at root — never commit; has NVIDIA keys
-- `DATABASE_URL` — Supabase Postgres connection string (set in Render env vars)
+- `DATABASE_URL` — Supabase Postgres via **Session pooler (IPv4)**:
+  `postgresql://postgres.fpfecsisksqseuhysesk:CLB39EF880John@aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`
+  - ⚠️ The *direct* connection (`db.<ref>.supabase.co`) resolves to **IPv6-only** and will NOT work from Render ("Network is unreachable"). Always use the pooler host.
+  - Password must not contain special chars needing percent-encoding.
 
 ## Schema (SQLite)
 
@@ -76,6 +79,9 @@
 - Render free tier: ephemeral SQLite — DB resets on instance restart; `seed.py` re-seeds on every boot
 - Seed creates: demo account (John Adhikari/demo1234), Demo Friend, Sara Khan (pending request), 5 posts, 3 messages, 1 notification
 - Token auth: `zone_token` in localStorage; 401 → redirect to login
+- **WebSocket auth:** `/ws?token=<zone_token>` (NOT `/ws/{username}` anymore). Invalid/missing token → close code 4001
+- **Password hashing:** bcrypt for new accounts; login falls back to legacy HMAC-SHA256 for pre-migration accounts (uses `password_salt`)
+- **Security:** CORS restricted to GitHub Pages + localhost:5173/5174; input validation via Pydantic `Field`; LIKE wildcards escaped; email only returned to the owner
 - All API calls require `Authorization: Bearer {token}` header (except register/login)
 - `friends` table uses alphabetical sorting: user_a = min(name1, name2), user_b = max(name1, name2)
 
