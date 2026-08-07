@@ -50,6 +50,8 @@ function open() {
 export function connect(user) {
   username = user || "";
   if (!username) return;
+  token = localStorage.getItem("zone_token") || "";
+  if (!token) return;
   if (socket && connected) return;
   open();
 }
