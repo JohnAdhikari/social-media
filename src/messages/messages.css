@@ -417,6 +417,34 @@
   font-size: 0.9rem;
 }
 
+.thread-input-wrap {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+
+.thread-input-wrap .thread-input {
+  width: 100%;
+  padding-right: 64px;
+}
+
+.thread-enter-hint {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-subtle);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.thread-input-wrap:focus-within .thread-enter-hint {
+  opacity: 0.8;
+}
+
 .thread-send {
   padding: 10px 22px;
   border-radius: var(--radius-full);

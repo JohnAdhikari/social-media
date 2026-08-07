@@ -367,16 +367,26 @@ function Messages() {
               </div>
 
               <form className="thread-composer" onSubmit={handleSend}>
-                <input
-                  type="text"
-                  className="thread-input"
-                  placeholder={`Message ${activeUser}...`}
-                  value={draft}
-                  onChange={(e) => {
-                    setDraft(e.target.value);
-                    notifyTyping(true);
-                  }}
-                />
+                <div className="thread-input-wrap">
+                  <input
+                    type="text"
+                    className="thread-input"
+                    placeholder={`Message ${activeUser}...`}
+                    value={draft}
+                    onChange={(e) => {
+                      setDraft(e.target.value);
+                      notifyTyping(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        e.currentTarget.form?.requestSubmit();
+                      }
+                    }}
+                    title="Press Enter to send"
+                  />
+                  <span className="thread-enter-hint" aria-hidden="true">Enter ↵</span>
+                </div>
                 <button type="submit" className="thread-send btn-primary" disabled={!draft.trim() || sending}>
                   Send
                 </button>
