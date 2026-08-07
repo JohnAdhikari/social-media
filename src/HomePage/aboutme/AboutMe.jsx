@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import "./aboutme.css";
 import pfp from "../../assets/pfp.png";
-import logo from "../../assets/logo.png";
+import ai from "../../assets/zone-ai.svg";
 import api from "../../api";
 
 function AboutMe() {
@@ -78,20 +78,20 @@ function AboutMe() {
         </div>
 
         {/* Stats Row */}
-        <div className="profile-stats">
-          <div className="stat-item">
-            <span className="stat-value">{stats.post_count}</span>
-            <span className="stat-label">Posts</span>
+        <div className="aboutme-stats">
+          <div className="aboutme-stat">
+            <span className="aboutme-stat-value">{stats.post_count}</span>
+            <span className="aboutme-stat-label">Posts</span>
           </div>
-          <div className="stat-divider"></div>
-          <div className="stat-item">
-            <span className="stat-value">{stats.friend_count}</span>
-            <span className="stat-label">Friends</span>
+          <div className="aboutme-stat-divider"></div>
+          <div className="aboutme-stat">
+            <span className="aboutme-stat-value">{stats.friend_count}</span>
+            <span className="aboutme-stat-label">Friends</span>
           </div>
-          <div className="stat-divider"></div>
-          <div className="stat-item">
-            <span className="stat-value">{stats.request_count}</span>
-            <span className="stat-label">Requests</span>
+          <div className="aboutme-stat-divider"></div>
+          <div className="aboutme-stat">
+            <span className="aboutme-stat-value">{stats.request_count}</span>
+            <span className="aboutme-stat-label">Requests</span>
           </div>
         </div>
 
@@ -103,7 +103,7 @@ function AboutMe() {
           className="zone-ai-card"
         >
           <div className="ai-icon-bg">
-            <img src={logo} className="ai-img" alt="Zone AI" />
+            <img src={ai} className="ai-img" alt="Zone AI" />
           </div>
           <div className="ai-card-text">
             <span className="ai-title">Zone AI Assistant</span>
