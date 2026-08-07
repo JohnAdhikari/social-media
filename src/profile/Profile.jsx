@@ -155,6 +155,7 @@ function Profile() {
       const updated = await api.updateProfile(data);
       setProfile(updated);
       setEditing(false);
+      window.dispatchEvent(new Event("zone:profile-updated"));
     } catch (err) {
       setEditError(err.message || "Could not save changes");
     } finally {

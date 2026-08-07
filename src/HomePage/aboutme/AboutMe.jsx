@@ -32,12 +32,19 @@ function AboutMe() {
         /* backend may be offline */
       }
     }
-    loadStats();
-    loadProfile();
-    const id = setInterval(loadStats, 20000);
+    function refresh() {
+      loadStats();
+      loadProfile();
+    }
+    refresh();
+    const id = setInterval(refresh, 20000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("zone:profile-updated", refresh);
     return () => {
       alive = false;
       clearInterval(id);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("zone:profile-updated", refresh);
     };
   }, []);
 
