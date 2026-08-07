@@ -23,20 +23,114 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 
 .conversation-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--border-glass);
+  padding: 16px 18px 0;
+  flex-direction: column;
+  gap: 12px;
+  align-items: stretch;
 }
 
 .conversation-head h2 {
   font-family: var(--font-heading);
   font-size: 1.1rem;
   color: var(--text-main);
+}
+
+.conversation-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.conv-tab {
+  flex: 1;
+  padding: 8px 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.conv-tab:hover {
+  color: var(--text-main);
+}
+
+.conv-tab.active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+.conv-tab-badge {
+  background: var(--accent-primary);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.conversation-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-glass);
+  color: var(--text-subtle);
+}
+
+.conversation-search input {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-main);
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.conversation-search input::placeholder {
+  color: var(--text-subtle);
+}
+
+.conv-section {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.conv-section-title {
+  padding: 8px 16px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.conv-label-badge {
+  font-size: 0.65rem;
+  color: var(--text-subtle);
+  background: var(--bg-glass-hover);
+  padding: 2px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
 }
 
 .conversation-count {
@@ -286,6 +380,77 @@
   padding: 10px 22px;
   border-radius: var(--radius-full);
   font-size: 0.9rem;
+}
+
+/* Message Requests */
+.msg-request-item {
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.msg-request-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px 8px;
+}
+
+.msg-request-actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+
+.msg-req-btn {
+  padding: 5px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid var(--border-glass);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.msg-req-btn.accept {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+.msg-req-btn.accept:hover {
+  background: var(--accent-gradient-hover);
+}
+
+.msg-req-btn.decline {
+  background: var(--bg-glass-hover);
+  color: var(--text-muted);
+}
+
+.msg-req-btn.decline:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Thread request banner */
+.thread-request-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: rgba(234, 179, 8, 0.08);
+  border-bottom: 1px solid rgba(234, 179, 8, 0.2);
+  font-size: 0.8rem;
+  color: #fbbf24;
+}
+
+.thread-request-banner svg {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.conversation-empty-hint {
+  font-size: 0.82rem;
+  color: var(--text-subtle);
 }
 
 @media (max-width: 720px) {

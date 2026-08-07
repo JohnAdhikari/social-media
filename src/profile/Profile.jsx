@@ -98,19 +98,21 @@ function Profile() {
       </button>
 
       <div className="profile-card glass-panel">
-        <div className="profile-page-cover"></div>
-        <div className="profile-page-body">
-          <div className="profile-page-head">
-            <div className="profile-avatar-wrap">
-              <img src={pfp} alt={profileName} className="profile-page-avatar" />
-              <span className="online-indicator large"></span>
+        <div className="profile-cover"></div>
+
+        <div className="profile-header">
+          <div className="profile-avatar-wrap">
+            <img src={pfp} alt={profileName} className="profile-avatar" />
+            <span className="online-indicator large"></span>
+          </div>
+
+          <div className="profile-header-top">
+            <div className="profile-header-info">
+              <h1 className="profile-name">{profileName}</h1>
+              <span className="profile-handle">@{profileName.toLowerCase().replace(/\s+/g, "")}</span>
             </div>
-            <div className="profile-page-meta">
-              <h1 className="profile-page-name">{profileName}</h1>
-              <span className="profile-page-handle">@{profileName.toLowerCase().replace(/\s+/g, "")}</span>
-              <p className="profile-page-bio">{bio}</p>
-            </div>
-            <div className="profile-page-actions">
+
+            <div className="profile-actions">
               {isOwn ? (
                 <Link to="/homepage" className="btn-primary profile-action">
                   Edit Profile
@@ -132,38 +134,40 @@ function Profile() {
             </div>
           </div>
 
-          <div className="profile-page-stats">
-            <div className="profile-stat"><b>{posts.length}</b><span>Posts</span></div>
-            <div className="profile-stat"><b>{profile?.friend_count ?? "—"}</b><span>Friends</span></div>
-            <div className="profile-stat"><b>{profile?.post_count ?? posts.length}</b><span>Total Posts</span></div>
-          </div>
+          <p className="profile-bio">{bio}</p>
+        </div>
 
-          {error && <div className="profile-error">{error}</div>}
+        <div className="profile-stats">
+          <div className="profile-stat"><b>{posts.length}</b><span>Posts</span></div>
+          <div className="profile-stat"><b>{profile?.friend_count ?? "—"}</b><span>Friends</span></div>
+          <div className="profile-stat"><b>{profile?.post_count ?? posts.length}</b><span>Total Posts</span></div>
+        </div>
 
-          <div className="profile-posts-section">
-            <h3>Posts</h3>
-            {posts.length === 0 ? (
-              <div className="profile-posts-empty">No posts yet.</div>
-            ) : (
-              <div className="profile-posts">
-                {posts.map((post) => (
-                  <div key={post.id} className="profile-post glass-panel">
-                    <p className="profile-post-text">{post.text}</p>
-                    {post.picture && (
-                      <div className="profile-post-media">
-                        <img src={post.picture} alt="Post media" className="profile-post-image" />
-                      </div>
-                    )}
-                    <div className="profile-post-meta">
-                      <span>{post.likes} likes</span>
-                      <span>{post.category}</span>
-                      <span>{post.comments.length} comments</span>
+        {error && <div className="profile-error">{error}</div>}
+
+        <div className="profile-posts-section">
+          <h3>Posts</h3>
+          {posts.length === 0 ? (
+            <div className="profile-posts-empty">No posts yet.</div>
+          ) : (
+            <div className="profile-posts">
+              {posts.map((post) => (
+                <div key={post.id} className="profile-post glass-panel">
+                  <p className="profile-post-text">{post.text}</p>
+                  {post.picture && (
+                    <div className="profile-post-media">
+                      <img src={post.picture} alt="Post media" className="profile-post-image" />
                     </div>
+                  )}
+                  <div className="profile-post-meta">
+                    <span>{post.likes} likes</span>
+                    <span>{post.category}</span>
+                    <span>{post.comments.length} comments</span>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

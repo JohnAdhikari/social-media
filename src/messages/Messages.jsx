@@ -9,7 +9,11 @@ import "./messages.css";
 function Messages() {
   const { username: routeUser } = useParams();
   const username = localStorage.getItem("username") || "Guest";
+  const [friends, setFriends] = useState([]);
   const [conversations, setConversations] = useState([]);
+  const [msgRequests, setMsgRequests] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [activeUser, setActiveUser] = useState(routeUser ? decodeURIComponent(routeUser) : null);
   const [thread, setThread] = useState([]);
   const [other, setOther] = useState(null);
@@ -17,25 +21,69 @@ function Messages() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [typing, setTyping] = useState(false);
+  const [activeTab, setActiveTab] = useState("chats");
   const threadEndRef = useRef(null);
   const typingTimer = useRef(null);
   const { isOnline } = usePresence();
 
-  async function loadConversations() {
+  async function loadAll() {
     try {
-      const data = await api.getConversations();
-      setConversations(data || []);
+      const [convData, reqData] = await Promise.all([
+        api.getConversations(),
+        api.getMessageRequests(),
+      ]);
+      setConversations(convData || []);
+      setMsgRequests(reqData.requests || []);
+      // Also load friends for the sidebar
+      try {
+        const fData = await api.getFriends();
+        setFriends(fData.friends || []);
+      } catch { /* ignore */ }
     } finally {
       setLoading(false);
     }
   }
 
+  async function runSearch(q) {
+    setSearchQuery(q);
+    if (!q.trim()) {
+      setSearchResults([]);
+      setActiveTab("chats");
+      return;
+    }
+    setActiveTab("search");
+    try {
+      const results = await api.searchUsers(q.trim());
+      setSearchResults(results || []);
+    } catch {
+      setSearchResults([]);
+    }
+  }
+
   function openThread(otherUser) {
     setActiveUser(otherUser);
+    setSearchQuery("");
+    setSearchResults([]);
+    setActiveTab("chats");
+  }
+
+  async function handleAcceptRequest(requestId, fromUser) {
+    try {
+      await api.acceptMessageRequest(requestId);
+      await loadAll();
+      openThread(fromUser);
+    } catch { /* ignore */ }
+  }
+
+  async function handleDeclineRequest(requestId) {
+    try {
+      await api.declineMessageRequest(requestId);
+      await loadAll();
+    } catch { /* ignore */ }
   }
 
   useEffect(() => {
-    loadConversations();
+    loadAll();
     connectRealtime(username);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -47,7 +95,7 @@ function Messages() {
       if (!alive) return;
       setOther(data.other);
       setThread(data.messages || []);
-      loadConversations();
+      loadAll();
     });
     return () => {
       alive = false;
@@ -58,7 +106,6 @@ function Messages() {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thread]);
 
-  // Live updates via WebSocket — replaces the 5s polling we used before.
   useEffect(() => {
     if (!activeUser) return;
     const off = onRealTime((data) => {
@@ -67,13 +114,12 @@ function Messages() {
         if (m.from_user === activeUser) {
           setThread((t) => (t.some((x) => x.id === m.id) ? t : [...t, m]));
         }
-        loadConversations();
+        loadAll();
       } else if (data.type === "typing" && data.from === activeUser) {
         setTyping(Boolean(data.typing));
         clearTimeout(typingTimer.current);
         typingTimer.current = setTimeout(() => setTyping(false), 3000);
       } else if (data.type === "read" && data.from === activeUser) {
-        // The other user read our messages — reflect it on our sent bubbles
         setThread((t) => t.map((m) => (m.from_user === username ? { ...m, read: true } : m)));
       }
     });
@@ -98,50 +144,153 @@ function Messages() {
       setThread((t) => [...t, msg]);
       setDraft("");
       notifyTyping(false);
-      await loadConversations();
+      await loadAll();
     } finally {
       setSending(false);
     }
   }
 
+  function friendStatus(username) {
+    return friends.some((f) => f.username === username);
+  }
+
   return (
     <div className="messages-page">
       <div className="messages-container glass-panel">
-        {/* Conversation List */}
+        {/* Sidebar */}
         <aside className="conversation-list">
           <div className="conversation-head">
             <h2>Messages</h2>
-            <span className="conversation-count">{conversations.length}</span>
+            <div className="conversation-tabs">
+              <button
+                className={`conv-tab ${activeTab === "chats" ? "active" : ""}`}
+                onClick={() => { setActiveTab("chats"); setSearchQuery(""); setSearchResults([]); }}
+              >
+                Chats
+              </button>
+              <button
+                className={`conv-tab ${activeTab === "requests" ? "active" : ""}`}
+                onClick={() => setActiveTab("requests")}
+              >
+                Requests
+                {msgRequests.length > 0 && <span className="conv-tab-badge">{msgRequests.length}</span>}
+              </button>
+            </div>
+          </div>
+
+          <div className="conversation-search">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={searchQuery}
+              onChange={(e) => runSearch(e.target.value)}
+            />
           </div>
 
           {loading ? (
             <div className="conversation-empty">Loading...</div>
-          ) : conversations.length === 0 ? (
-            <div className="conversation-empty">
-              No messages yet.
-              <br />
-              Find friends to start a chat.
-            </div>
           ) : (
-            conversations.map((c) => (
-              <button
-                key={c.username}
-                className={`conversation-item ${activeUser === c.username ? "active" : ""}`}
-                onClick={() => openThread(c.username)}
-              >
-                <div className="conversation-avatar-wrap">
-                  <img src={pfp} alt={c.username} className="conversation-avatar" />
-                  {isOnline(c.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
+            <>
+              {/* Search Results */}
+              {activeTab === "search" && searchResults.length > 0 && (
+                <div className="conv-section">
+                  <div className="conv-section-title">Search Results</div>
+                  {searchResults.map((u) => (
+                    <button key={u.username} className="conversation-item" onClick={() => openThread(u.username)}>
+                      <div className="conversation-avatar-wrap">
+                        <img src={pfp} alt={u.username} className="conversation-avatar" />
+                        {isOnline(u.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
+                      </div>
+                      <div className="conversation-info">
+                        <div className="conversation-name-row">
+                          <span className="conversation-name">{u.username}</span>
+                          {!friendStatus(u.username) && <span className="conv-label-badge">Not friend</span>}
+                        </div>
+                        <span className="conversation-last">{u.bio || "Zone Media user"}</span>
+                      </div>
+                    </button>
+                  ))}
                 </div>
-                <div className="conversation-info">
-                  <div className="conversation-name-row">
-                    <span className="conversation-name">{c.username}</span>
-                    {c.unread > 0 && <span className="conversation-unread">{c.unread}</span>}
-                  </div>
-                  <span className="conversation-last">{c.last_message}</span>
+              )}
+
+              {activeTab === "search" && searchResults.length === 0 && searchQuery && (
+                <div className="conversation-empty">No users found.</div>
+              )}
+
+              {/* Message Requests */}
+              {activeTab === "requests" && (
+                <div className="conv-section">
+                  {msgRequests.length === 0 ? (
+                    <div className="conversation-empty">No pending message requests.</div>
+                  ) : (
+                    msgRequests.map((req) => (
+                      <div key={req.from_user} className="msg-request-item">
+                        <div className="msg-request-header">
+                          <div className="conversation-avatar-wrap">
+                            <img src={pfp} alt={req.from_user} className="conversation-avatar" />
+                          </div>
+                          <div className="conversation-info">
+                            <span className="conversation-name">{req.from_user}</span>
+                            <span className="conversation-last">{req.messages[req.messages.length - 1]?.text}</span>
+                          </div>
+                        </div>
+                        <div className="msg-request-actions">
+                          <button className="msg-req-btn accept" onClick={() => handleAcceptRequest(req.messages[0].id, req.from_user)}>
+                            Accept
+                          </button>
+                          <button className="msg-req-btn decline" onClick={() => handleDeclineRequest(req.messages[0].id)}>
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-              </button>
-            ))
+              )}
+
+              {/* Conversations / Chats */}
+              {activeTab === "chats" && (
+                <div className="conv-section">
+                  {conversations.length === 0 && msgRequests.length === 0 ? (
+                    <div className="conversation-empty">
+                      No messages yet.
+                      <br />
+                      <span className="conversation-empty-hint">Search for users above to start a chat.</span>
+                    </div>
+                  ) : conversations.length === 0 ? (
+                    <div className="conversation-empty">
+                      No active conversations yet.
+                      <br />
+                      <span className="conversation-empty-hint">Accept a message request or search to start chatting.</span>
+                    </div>
+                  ) : (
+                    conversations.map((c) => (
+                      <button
+                        key={c.username}
+                        className={`conversation-item ${activeUser === c.username ? "active" : ""}`}
+                        onClick={() => openThread(c.username)}
+                      >
+                        <div className="conversation-avatar-wrap">
+                          <img src={pfp} alt={c.username} className="conversation-avatar" />
+                          {isOnline(c.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
+                        </div>
+                        <div className="conversation-info">
+                          <div className="conversation-name-row">
+                            <span className="conversation-name">{c.username}</span>
+                            {c.unread > 0 && <span className="conversation-unread">{c.unread}</span>}
+                          </div>
+                          <span className="conversation-last">{c.last_message}</span>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </>
           )}
         </aside>
 
@@ -159,7 +308,7 @@ function Messages() {
             </div>
           ) : (
             <>
-<div className="thread-head">
+              <div className="thread-head">
                 <div className="thread-head-user">
                   <img src={pfp} alt={other?.username} className="thread-head-avatar" />
                   <div>
@@ -174,13 +323,24 @@ function Messages() {
                 </Link>
               </div>
 
+              {!friendStatus(activeUser) && (
+                <div className="thread-request-banner">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  <span>This is a message request. Messages will be delivered after they accept.</span>
+                </div>
+              )}
+
               <div className="thread-body">
                 {thread.length === 0 ? (
                   <div className="thread-empty small">
                     <p>Say hello to {activeUser}!</p>
                   </div>
                 ) : (
-thread.map((m) => (
+                  thread.map((m) => (
                     <div key={m.id} className={`message-bubble ${m.from_user === username ? "mine" : ""}`}>
                       <span className="message-text">{m.text}</span>
                       <span className="message-time">
@@ -198,7 +358,7 @@ thread.map((m) => (
               </div>
 
               <form className="thread-composer" onSubmit={handleSend}>
-<input
+                <input
                   type="text"
                   className="thread-input"
                   placeholder={`Message ${activeUser}...`}

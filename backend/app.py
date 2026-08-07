@@ -290,6 +290,15 @@ def init_db() -> None:
                 read INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS message_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_user TEXT NOT NULL,
+                to_user TEXT NOT NULL,
+                text TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TEXT NOT NULL
+            );
         """)
         conn.commit()
 
@@ -729,6 +738,12 @@ async def respond_friend_request(payload: FriendRespond, author: str = Depends(g
             )
             _notify_db(conn, payload.from_user, "friend_accept", author)
             conn.commit()
+            # Mark the friend_request notification as read and update it
+            conn.execute(
+                "UPDATE notifications SET read = 1, type = 'friend_accept', text = ? WHERE username = ? AND type = 'friend_request' AND actor = ?",
+                (f"You are now friends with {author}", payload.from_user, author),
+            )
+            conn.commit()
         else:
             conn.execute("DELETE FROM friend_requests WHERE id = ?", (row["id"],))
             conn.commit()
@@ -835,13 +850,109 @@ async def send_message(other_user: str, payload: MessageCreate, author: str = De
         target = conn.execute("SELECT id FROM users WHERE username = ?", (other_user,)).fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
-        cursor = conn.execute(
-            "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (?, ?, ?, 0, ?)",
-            (author, other_user, payload.text.strip(), now_iso()),
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        # Check if they are friends
+        is_friend = conn.execute(
+            "SELECT id FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+            (author, other_user, other_user, author),
+        ).fetchone()
+
+        if is_friend:
+            # Direct message (existing behavior)
+            cursor = conn.execute(
+                "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (?, ?, ?, 0, ?)",
+                (author, other_user, payload.text.strip(), now_iso()),
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        else:
+            # Non-friend: store as message request
+            cursor = conn.execute(
+                "INSERT INTO message_requests (from_user, to_user, text, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+                (author, other_user, payload.text.strip(), now_iso()),
+            )
+            conn.commit()
+            # Return a pseudo-message response
+            return {
+                "id": cursor.lastrowid,
+                "from_user": author,
+                "to_user": other_user,
+                "text": payload.text.strip(),
+                "read": False,
+                "created_at": now_iso(),
+                "message_request": True,
+            }
     message = _serialize_message(row)
     # Push the new message to the recipient's live socket if connected
     await manager.notify(other_user, {"type": "message", "message": message})
     return message
+
+
+# ---------------------------------------------------------------------------
+# Message requests (non-friend messaging)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/message-requests")
+def get_message_requests(author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM message_requests WHERE to_user = ? AND status = 'pending' ORDER BY id ASC",
+            (author,),
+        ).fetchall()
+        # Group by sender
+        grouped = {}
+        for r in rows:
+            sender = r["from_user"]
+            if sender not in grouped:
+                grouped[sender] = []
+            grouped[sender].append({
+                "id": r["id"],
+                "text": r["text"],
+                "created_at": r["created_at"],
+            })
+        return {"requests": [{"from_user": k, "messages": v} for k, v in grouped.items()]}
+
+
+@app.post("/api/message-requests/{request_id}/accept", status_code=200)
+async def accept_message_request(request_id: int, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM message_requests WHERE id = ? AND to_user = ? AND status = 'pending'",
+            (request_id, author),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Request not found")
+        sender = row["from_user"]
+        # Migrate all pending messages from this sender to messages table
+        pending = conn.execute(
+            "SELECT * FROM message_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            (sender, author),
+        ).fetchall()
+        for msg in pending:
+            conn.execute(
+                "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (?, ?, ?, 1, ?)",
+                (sender, author, msg["text"], msg["created_at"]),
+            )
+        conn.execute(
+            "UPDATE message_requests SET status = 'accepted' WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            (sender, author),
+        )
+        conn.commit()
+    return {"status": "success", "from_user": sender}
+
+
+@app.post("/api/message-requests/{request_id}/decline", status_code=200)
+async def decline_message_request(request_id: int, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM message_requests WHERE id = ? AND to_user = ? AND status = 'pending'",
+            (request_id, author),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Request not found")
+        sender = row["from_user"]
+        conn.execute(
+            "DELETE FROM message_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            (sender, author),
+        )
+        conn.commit()
+    return {"status": "success", "from_user": sender}

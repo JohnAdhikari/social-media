@@ -74,6 +74,13 @@ export const api = {
   sendMessage: (otherUser, text) =>
     request(`/messages/${encodeURIComponent(otherUser)}`, { method: "POST", body: JSON.stringify({ text }) }),
 
+  // Message Requests (non-friend DMs)
+  getMessageRequests: () => request("/message-requests"),
+  acceptMessageRequest: (id) =>
+    request(`/message-requests/${id}/accept`, { method: "POST" }),
+  declineMessageRequest: (id) =>
+    request(`/message-requests/${id}/decline`, { method: "POST" }),
+
   // Profiles
   getUser: (username) => request(`/users/${encodeURIComponent(username)}`),
   getUserPosts: (username) => request(`/users/${encodeURIComponent(username)}/posts`),
