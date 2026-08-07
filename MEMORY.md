@@ -28,7 +28,7 @@
 
 ## Schema (SQLite)
 
-- `users` — id, username (unique), email (unique), password_salt, password_hash, bio, created_at
+- `users` — id, username (unique), email (unique), password_salt, password_hash, bio, avatar (data URL), cover (data URL), created_at
 - `sessions` — token (PK), username, created_at, expires_at
 - `posts` — id, username, text, picture, category, likes, created_at
 - `comments` — id, post_id (FK), username, text, created_at
@@ -40,7 +40,7 @@
 
 ## Key API Endpoints
 
-- Auth: `POST /api/register` (username, email, password), `POST /api/login` (username_or_email, password), `POST /api/logout`, `GET /api/me`
+- Auth: `POST /api/register` (username, email, password), `POST /api/login` (username_or_email, password), `POST /api/logout`, `GET /api/me`, `PUT /api/me` (bio/avatar/cover; explicit `null` clears a field, omitted fields untouched)
 - Posts: `GET /api/posts`, `POST /api/posts`, `DELETE /api/posts/{id}`, `POST /api/posts/{id}/like`, `POST /api/posts/{id}/comments`
 - Friends: `GET /api/friends`, `POST /api/friends/request`, `POST /api/friends/respond` (accept: from_user + accept bool), `POST /api/friends/remove`
 - Messages: `GET /api/conversations`, `GET /api/messages/{user}`, `POST /api/messages/{user}` (non-friend → stored in message_requests)
