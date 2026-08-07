@@ -96,6 +96,7 @@ function Messages() {
       setOther(data.other);
       setThread(data.messages || []);
       loadAll();
+      window.dispatchEvent(new Event("zone:messages-updated"));
     });
     return () => {
       alive = false;

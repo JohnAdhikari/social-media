@@ -416,6 +416,19 @@
   align-items: center;
   justify-content: center;
 }
+.nav-msg-badge {
+  background: var(--accent-primary);
+}
+.drawer-item-icon {
+  flex-shrink: 0;
+  margin-right: 10px;
+  color: var(--text-muted);
+}
+.drawer-msg-badge {
+  position: static;
+  margin-left: auto;
+  background: var(--accent-primary);
+}
 .nav-notif-drop {
   position: absolute;
   top: calc(100% + 8px);
