@@ -6,6 +6,7 @@ import "./profile.css";
 
 const MAX_AVATAR = 512;
 const MAX_COVER = 1600;
+const REMOVE = "__remove__";
 
 function resizeImage(file, maxSize) {
   return new Promise((resolve, reject) => {
@@ -147,8 +148,10 @@ function Profile() {
     setEditError("");
     try {
       const data = { bio: editBio };
-      if (editAvatar) data.avatar = editAvatar;
-      if (editCover) data.cover = editCover;
+      if (editAvatar === REMOVE) data.avatar = null;
+      else if (editAvatar) data.avatar = editAvatar;
+      if (editCover === REMOVE) data.cover = null;
+      else if (editCover) data.cover = editCover;
       const updated = await api.updateProfile(data);
       setProfile(updated);
       setEditing(false);
@@ -284,16 +287,27 @@ function Profile() {
             <div className="profile-modal-field">
               <label>Profile Photo</label>
               <div className="profile-modal-photo-row">
-                <img src={editAvatar || avatarUrl} alt="Avatar preview" className="profile-modal-avatar" />
+                <img src={editAvatar === REMOVE ? pfp : editAvatar || avatarUrl} alt="Avatar preview" className="profile-modal-avatar" />
                 <div className="profile-modal-photo-actions">
                   <input ref={avatarInputRef} type="file" accept="image/*" hidden onChange={onAvatarFile} />
                   <button className="btn-primary" onClick={() => avatarInputRef.current?.click()}>
                     Upload photo
                   </button>
-                  {editAvatar && (
+                  {editAvatar && editAvatar !== REMOVE && (
                     <button className="profile-modal-ghost" onClick={() => setEditAvatar(null)}>
                       Revert
                     </button>
+                  )}
+                  {editAvatar === REMOVE ? (
+                    <button className="profile-modal-ghost" onClick={() => setEditAvatar(null)}>
+                      Undo
+                    </button>
+                  ) : (
+                    profile?.avatar && (
+                      <button className="profile-modal-ghost" onClick={() => setEditAvatar(REMOVE)}>
+                        Remove
+                      </button>
+                    )
                   )}
                 </div>
               </div>
@@ -303,19 +317,30 @@ function Profile() {
               <label>Cover Photo</label>
               <div
                 className="profile-modal-cover-preview"
-                style={(editCover || coverUrl) ? { backgroundImage: `url(${editCover || coverUrl})` } : undefined}
+                style={(editCover !== REMOVE && (editCover || coverUrl)) ? { backgroundImage: `url(${editCover || coverUrl})` } : undefined}
               >
-                {!(editCover || coverUrl) && <span>No cover set</span>}
+                {editCover === REMOVE || (!editCover && !coverUrl) ? <span>No cover set</span> : null}
               </div>
               <div className="profile-modal-photo-actions">
                 <input ref={coverInputRef} type="file" accept="image/*" hidden onChange={onCoverFile} />
                 <button className="btn-primary" onClick={() => coverInputRef.current?.click()}>
                   Upload cover
                 </button>
-                {editCover && (
+                {editCover && editCover !== REMOVE && (
                   <button className="profile-modal-ghost" onClick={() => setEditCover(null)}>
                     Revert
                   </button>
+                )}
+                {editCover === REMOVE ? (
+                  <button className="profile-modal-ghost" onClick={() => setEditCover(null)}>
+                    Undo
+                  </button>
+                ) : (
+                  profile?.cover && (
+                    <button className="profile-modal-ghost" onClick={() => setEditCover(REMOVE)}>
+                      Remove
+                    </button>
+                  )
                 )}
               </div>
             </div>

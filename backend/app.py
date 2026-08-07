@@ -473,11 +473,11 @@ def logout(author: str = Depends(get_author)) -> dict:
 def me(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = %s", (author,)).fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    user = _public_user(row)
-    user["post_count"] = _post_count(conn, author)
-    user["friend_count"] = len(_friend_names(conn, author))
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = _public_user(row)
+        user["post_count"] = _post_count(conn, author)
+        user["friend_count"] = len(_friend_names(conn, author))
     return user
 
 
@@ -485,13 +485,14 @@ def me(author: str = Depends(get_author)) -> dict:
 def update_profile(payload: ProfileUpdate, author: str = Depends(get_author)) -> dict:
     sets = []
     params = []
-    if payload.bio is not None:
+    fields = payload.model_fields_set
+    if "bio" in fields:
         sets.append("bio = %s")
-        params.append(payload.bio.strip()[:200])
-    if payload.avatar is not None:
+        params.append(payload.bio.strip()[:200] if payload.bio else "")
+    if "avatar" in fields:
         sets.append("avatar = %s")
         params.append(payload.avatar)
-    if payload.cover is not None:
+    if "cover" in fields:
         sets.append("cover = %s")
         params.append(payload.cover)
     if not sets:
