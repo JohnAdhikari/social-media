@@ -5,9 +5,9 @@ import secrets
 import hmac
 import hashlib
 import sys
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from datetime import datetime, timezone
+
+from app import PgConnection, init_db
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 if not DATABASE_URL:
@@ -16,7 +16,8 @@ if not DATABASE_URL:
 
 
 def connect():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    init_db()
+    return PgConnection(DATABASE_URL)
 
 
 def now_iso() -> str:

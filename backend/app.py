@@ -161,12 +161,50 @@ class MessageCreate(BaseModel):
 # Database helpers
 # ---------------------------------------------------------------------------
 
-def connect() -> psycopg2.extensions.connection:
-    """Open a Postgres connection. DATABASE_URL must be set in the environment."""
+def connect():
+    """Open a Postgres connection with a sqlite3-like .execute() interface."""
     url = os.environ.get("DATABASE_URL", "")
     if not url:
-        raise RuntimeError("DATABASE_URL is not set — configure it in the Render env vars")
-    return psycopg2.connect(url, cursor_factory=RealDictCursor)
+        raise RuntimeError("DATABASE_URL is not set - configure it in the Render env vars")
+    return PgConnection(url)
+
+
+class PgConnection:
+    """Thin wrapper around psycopg2 that mirrors sqlite3.Connection's API."""
+
+    def __init__(self, dsn: str):
+        self._conn = psycopg2.connect(dsn, cursor_factory=RealDictCursor)
+
+    def execute(self, sql: str, params=None):
+        cur = self._conn.cursor()
+        cur.execute(sql, params or ())
+        return cur
+
+    def executescript(self, script: str) -> None:
+        cur = self._conn.cursor()
+        for stmt in script.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                cur.execute(stmt)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self._conn.rollback()
+        else:
+            self._conn.commit()
+        self._conn.close()
 
 
 def now_iso() -> str:
