@@ -146,7 +146,10 @@ function Login() {
               className="demo-login-btn"
               onClick={handleDemoLogin}
             >
-              ⚡ Quick Demo Sign In
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"></path>
+              </svg>
+              <span>Quick Demo Sign In</span>
             </button>
           </form>
 

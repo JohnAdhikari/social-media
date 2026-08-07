@@ -167,6 +167,10 @@
 }
 
 .demo-login-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px dashed rgba(255, 255, 255, 0.2);
   color: #e2e8f0;
@@ -175,6 +179,11 @@
   font-weight: 600;
   font-size: 0.9rem;
   transition: all 0.2s ease;
+}
+
+.demo-login-btn svg {
+  color: var(--accent-primary);
+  flex-shrink: 0;
 }
 
 .demo-login-btn:hover {
