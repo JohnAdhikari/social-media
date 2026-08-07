@@ -124,7 +124,7 @@ function Contact() {
             {friends.map((f) => (
               <div key={f.username} className="contact-item">
                 <div className="contact-avatar-wrapper">
-                  <img src={pfp} alt={f.username} className="contact-avatar" />
+                  <img src={f.avatar || pfp} alt={f.username} className="contact-avatar" />
                   {isOnline(f.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
                 </div>
                 <div className="contact-info">
@@ -199,7 +199,7 @@ function Contact() {
             {discover.slice(0, 6).map((u) => (
               <div key={u.username} className="contact-item">
                 <div className="contact-avatar-wrapper">
-                  <img src={pfp} alt={u.username} className="contact-avatar" />
+                  <img src={u.avatar || pfp} alt={u.username} className="contact-avatar" />
                 </div>
                 <div className="contact-info">
                   <span className="contact-name">{u.username}</span>
@@ -234,7 +234,7 @@ function Contact() {
             {suggestions.map((u) => (
               <div key={u.username} className="contact-item">
                 <div className="contact-avatar-wrapper">
-                  <img src={pfp} alt={u.username} className="contact-avatar" />
+                  <img src={u.avatar || pfp} alt={u.username} className="contact-avatar" />
                 </div>
                 <div className="contact-info">
                   <span className="contact-name">{u.username}</span>

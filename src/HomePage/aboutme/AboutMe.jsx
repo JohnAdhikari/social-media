@@ -6,13 +6,9 @@ import api from "../../api";
 
 function AboutMe() {
   const username = localStorage.getItem("username") || "John Adhikari";
+  const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState({ post_count: 0, friend_count: 0, request_count: 0 });
-  const [bio, setBio] = useState(() => {
-    const stored = localStorage.getItem("zone_user_bio") || "";
-    return stored === "Full-stack developer & AI enthusiast building future web apps."
-      ? ""
-      : stored;
-  });
+  const [bio, setBio] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
@@ -25,7 +21,19 @@ function AboutMe() {
         /* backend may be offline */
       }
     }
+    async function loadProfile() {
+      try {
+        const me = await api.me();
+        if (alive) {
+          setProfile(me);
+          setBio(me.bio || "");
+        }
+      } catch {
+        /* backend may be offline */
+      }
+    }
     loadStats();
+    loadProfile();
     const id = setInterval(loadStats, 20000);
     return () => {
       alive = false;
@@ -33,20 +41,28 @@ function AboutMe() {
     };
   }, []);
 
-  function handleSaveBio() {
-    localStorage.setItem("zone_user_bio", bio);
-    setIsEditing(false);
+  async function handleSaveBio() {
+    try {
+      const me = await api.updateProfile({ bio });
+      setProfile(me);
+      setIsEditing(false);
+    } catch {
+      /* keep editing on failure */
+    }
   }
 
   return (
     <div className="aboutme-card glass-panel">
       {/* Cover Header Banner */}
-      <div className="profile-cover"></div>
+      <div
+        className="profile-cover"
+        style={profile?.cover ? { backgroundImage: `url(${profile.cover})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}
+      ></div>
 
       <div className="profile-content">
         <div className="profile-avatar-row">
           <div className="avatar-wrapper">
-            <img src={pfp} className="profile-avatar" alt="Avatar" />
+            <img src={profile?.avatar || pfp} className="profile-avatar" alt="Avatar" />
             <span className="online-indicator"></span>
           </div>
           <button

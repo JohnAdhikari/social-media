@@ -202,7 +202,7 @@ function Messages() {
                   {searchResults.map((u) => (
                     <button key={u.username} className="conversation-item" onClick={() => openThread(u.username)}>
                       <div className="conversation-avatar-wrap">
-                        <img src={pfp} alt={u.username} className="conversation-avatar" />
+                        <img src={u.avatar || pfp} alt={u.username} className="conversation-avatar" />
                         {isOnline(u.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
                       </div>
                       <div className="conversation-info">
@@ -231,7 +231,7 @@ function Messages() {
                       <div key={req.from_user} className="msg-request-item">
                         <div className="msg-request-header">
                           <div className="conversation-avatar-wrap">
-                            <img src={pfp} alt={req.from_user} className="conversation-avatar" />
+                            <img src={req.avatar || pfp} alt={req.from_user} className="conversation-avatar" />
                           </div>
                           <div className="conversation-info">
                             <span className="conversation-name">{req.from_user}</span>
@@ -275,7 +275,7 @@ function Messages() {
                         onClick={() => openThread(c.username)}
                       >
                         <div className="conversation-avatar-wrap">
-                          <img src={pfp} alt={c.username} className="conversation-avatar" />
+                          <img src={c.avatar || pfp} alt={c.username} className="conversation-avatar" />
                           {isOnline(c.username) ? <span className="contact-online-dot"></span> : <span className="contact-offline-dot"></span>}
                         </div>
                         <div className="conversation-info">
@@ -310,7 +310,7 @@ function Messages() {
             <>
               <div className="thread-head">
                 <div className="thread-head-user">
-                  <img src={pfp} alt={other?.username} className="thread-head-avatar" />
+                  <img src={other?.avatar || pfp} alt={other?.username} className="thread-head-avatar" />
                   <div>
                     <span className="thread-head-name">{other?.username}</span>
                     <span className={`thread-head-bio ${typing ? "typing" : ""}`}>

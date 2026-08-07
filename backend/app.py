@@ -170,6 +170,11 @@ class FriendRespond(BaseModel):
 class MessageCreate(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
 
+class ProfileUpdate(BaseModel):
+    bio: Optional[str] = Field(default=None, max_length=200)
+    avatar: Optional[str] = Field(default=None, max_length=1200000)
+    cover: Optional[str] = Field(default=None, max_length=1200000)
+
 
 # ---------------------------------------------------------------------------
 # Database helpers
@@ -294,8 +299,13 @@ def init_db() -> None:
                 password_salt TEXT NOT NULL,
                 password_hash TEXT NOT NULL,
                 bio TEXT DEFAULT '',
+                avatar TEXT,
+                cover TEXT,
                 created_at TEXT NOT NULL
             );
+
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS cover TEXT;
 
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
@@ -395,6 +405,8 @@ def _public_user(row) -> dict:
         "id": row["id"],
         "username": row["username"],
         "bio": row["bio"],
+        "avatar": row["avatar"],
+        "cover": row["cover"],
         "created_at": row["created_at"],
     }
 
@@ -466,6 +478,34 @@ def me(author: str = Depends(get_author)) -> dict:
     user = _public_user(row)
     user["post_count"] = _post_count(conn, author)
     user["friend_count"] = len(_friend_names(conn, author))
+    return user
+
+
+@app.put("/api/me")
+def update_profile(payload: ProfileUpdate, author: str = Depends(get_author)) -> dict:
+    sets = []
+    params = []
+    if payload.bio is not None:
+        sets.append("bio = %s")
+        params.append(payload.bio.strip()[:200])
+    if payload.avatar is not None:
+        sets.append("avatar = %s")
+        params.append(payload.avatar)
+    if payload.cover is not None:
+        sets.append("cover = %s")
+        params.append(payload.cover)
+    if not sets:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+    params.append(author)
+    with connect() as conn:
+        conn.execute(f"UPDATE users SET {', '.join(sets)} WHERE username = %s", params)
+        conn.commit()
+        row = conn.execute("SELECT * FROM users WHERE username = %s", (author,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        user = _public_user(row)
+        user["post_count"] = _post_count(conn, author)
+        user["friend_count"] = len(_friend_names(conn, author))
     return user
 
 
@@ -556,6 +596,7 @@ def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
             result.append({
                 "username": name,
                 "bio": r["bio"],
+                "avatar": r["avatar"],
                 "post_count": _post_count(conn, name),
                 "status": status,
             })
@@ -581,6 +622,7 @@ def suggest_friends(author: str = Depends(get_author)) -> List[dict]:
                 "username": name,
                 "email": r["email"],
                 "bio": r["bio"],
+                "avatar": r["avatar"],
                 "post_count": _post_count(conn, name),
             })
             if len(result) >= 5:
@@ -746,10 +788,14 @@ def _sent_requests(conn, username: str) -> List[str]:
 def get_friends(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         friend_names = _friend_names(conn, author)
-        friends = [
-            {"username": name, "post_count": _post_count(conn, name)}
-            for name in friend_names
-        ]
+        friends = []
+        for name in friend_names:
+            frow = conn.execute("SELECT avatar FROM users WHERE username = %s", (name,)).fetchone()
+            friends.append({
+                "username": name,
+                "avatar": frow["avatar"] if frow else None,
+                "post_count": _post_count(conn, name),
+            })
         return {
             "friends": friends,
             "pending_incoming": _incoming_requests(conn, author),
@@ -884,8 +930,10 @@ def get_conversations(author: str = Depends(get_author)) -> List[dict]:
                     (author, other, other, author),
                 ).fetchone()
             )
+            other_row = conn.execute("SELECT avatar FROM users WHERE username = %s", (other,)).fetchone()
             result.append({
                 "username": other,
+                "avatar": other_row["avatar"] if other_row else None,
                 "is_friend": is_friend,
                 "last_message": last["text"],
                 "last_time": last["created_at"],
@@ -913,6 +961,8 @@ async def get_thread(other_user: str, author: str = Depends(get_author)) -> dict
         other_profile = {
             "username": other["username"] if other else other_user,
             "bio": other["bio"] if other else "",
+            "avatar": other["avatar"] if other else None,
+            "cover": other["cover"] if other else None,
             "post_count": _post_count(conn, other_user) if other else 0,
         }
     # Let the sender know their messages were read
@@ -989,7 +1039,11 @@ def get_message_requests(author: str = Depends(get_author)) -> dict:
                 "text": r["text"],
                 "created_at": r["created_at"],
             })
-        return {"requests": [{"from_user": k, "messages": v} for k, v in grouped.items()]}
+        result = []
+        for k, v in grouped.items():
+            arow = conn.execute("SELECT avatar FROM users WHERE username = %s", (k,)).fetchone()
+            result.append({"from_user": k, "avatar": arow["avatar"] if arow else None, "messages": v})
+        return {"requests": result}
 
 
 @app.post("/api/message-requests/{request_id}/accept", status_code=200)

@@ -92,18 +92,33 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-glass);
+  margin: 10px 12px;
+  padding: 8px 14px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-full);
   color: var(--text-subtle);
+  box-sizing: border-box;
+}
+
+.conversation-search:focus-within {
+  border-color: var(--accent-primary);
 }
 
 .conversation-search input {
   flex: 1;
-  background: none;
+  min-width: 0;
+  background: transparent;
   border: none;
   color: var(--text-main);
   font-size: 0.85rem;
   outline: none;
+  box-shadow: none;
+}
+
+.conversation-search input:focus {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .conversation-search input::placeholder {

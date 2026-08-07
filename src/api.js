@@ -41,6 +41,7 @@ export const api = {
   login: (data) => request("/login", { method: "POST", body: JSON.stringify(data) }),
   logout: () => request("/logout", { method: "POST" }),
   me: () => request("/me"),
+  updateProfile: (data) => request("/me", { method: "PUT", body: JSON.stringify(data) }),
 
   // Presence
   online: () => request("/online"),
