@@ -7,7 +7,8 @@
 ## Stack
 
 - **Frontend:** React 19 + Vite 7 + Tailwind 4 (no Tailwind — uses custom CSS vars)
-- **Backend:** Python FastAPI + SQLite (ephemeral on Render free tier)
+- **Backend:** Python FastAPI + Supabase Postgres (free tier, project `fpfecsisksqseuhysesk`)
+- **Supabase MCP:** configured in `opencode.json`, project ref `fpfecsisksqseuhysesk`
 - **Real-time:** WebSocket (`/ws/{username}`)
 - **Deploy (frontend):** GitHub Pages via `gh-pages` branch → https://JohnAdhikari.github.io/social-media
 - **Deploy (backend):** Render free tier → https://zone-media-api.onrender.com (Blueprint: `render.yaml`)
@@ -20,6 +21,7 @@
   - `ZONE_WS` does NOT include path: `wss://zone-media-api.onrender.com` (WebSocket path is `/ws/{username}`)
 - Vite dev proxy: `/api` → `http://127.0.0.1:8000` and `/ws` → `ws://127.0.0.1:8000`
 - `.env` at root — never commit; has NVIDIA keys
+- `DATABASE_URL` — Supabase Postgres connection string (set in Render env vars)
 
 ## Schema (SQLite)
 
@@ -100,13 +102,14 @@ Get-NetTCPConnection -LocalPort 5173 | ForEach-Object { Stop-Process -Id $_.Owni
 
 - `config.js` ZONE_API MUST end with `/api` — without it, all fetch calls hit 404 "Not Found"
 - `.vite/` folder: add to `.gitignore` and `eslint.config.js` globalIgnores to avoid lint noise
-- Render free instance sleeps after ~15 min idle; first request after sleep takes 20-30s (cold start)
+- Render free tier: data now persists via Supabase Postgres (no more ephemeral DB)
+- First Render cold start takes 20-30s; Supabase connection pooling keeps queries fast
 - CORS: `allow_origins=["*"]` + `allow_credentials=True` — browser echoes the Origin header
 - `respond_friend_request` now updates the notification type from `friend_request` → `friend_accept` (fixes stale accept/decline buttons)
 
 ## Pending / Future
 
-- Persistent DB: upgrade Render plan + add disk, or use hosted SQLite/Supabase
+- ~~Persistent DB~~ ✅ Done — migrated to Supabase Postgres (free tier)
 - Frontend: could migrate to Tailwind CSS for consistency
 - Add rich media (image uploads in posts + messages)
 - User search in navbar (currently only in Contact sidebar and Messages)
