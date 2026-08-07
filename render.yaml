@@ -1,12 +1,10 @@
-# Render blueprint — Zone Media backend (FastAPI + SQLite + WebSockets)
-# Free tier: WebSockets supported. NOTE: free instances have an EPHEMERAL
-# filesystem, so SQLite data resets whenever the instance restarts/spins down.
-# (Free plan does NOT allow persistent disks.) For persistent data, upgrade to
-# a paid instance and re-add a disk; for a quick demo the ephemeral DB is fine.
+# Render blueprint — Zone Media backend (FastAPI + Postgres + WebSockets)
 #
-# Usage (easier than the manual UI):
-#   Render dashboard -> New -> Blueprint -> pick this repo.
-#   Render detects render.yaml and provisions zone-media-api automatically.
+# DATABASE_URL must be set in the Render dashboard (Settings → Environment):
+#   Go to Supabase/Neon (free tier), create a project, copy the connection
+#   string (use the "transaction" or "direct" URL — the format is
+#   postgresql://user:pass@host:5432/dbname). Paste it as DATABASE_URL.
+#   No disk needed — data lives in the hosted Postgres.
 
 services:
   - type: web

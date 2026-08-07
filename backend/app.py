@@ -7,20 +7,20 @@ import hmac
 import json
 import os
 import secrets
-import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
+
+import psycopg2
+import psycopg2.errors
+from psycopg2.extras import RealDictCursor
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.environ.get("ZONE_DATA_DIR", BASE_DIR / "data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA_DIR / "social.db"
 
 app = FastAPI(title="Zone Media API")
 
@@ -161,11 +161,12 @@ class MessageCreate(BaseModel):
 # Database helpers
 # ---------------------------------------------------------------------------
 
-def connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+def connect() -> psycopg2.extensions.connection:
+    """Open a Postgres connection. DATABASE_URL must be set in the environment."""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        raise RuntimeError("DATABASE_URL is not set — configure it in the Render env vars")
+    return psycopg2.connect(url, cursor_factory=RealDictCursor)
 
 
 def now_iso() -> str:
@@ -189,7 +190,7 @@ def get_author(authorization: Optional[str] = Header(default=None)) -> str:
         raise HTTPException(status_code=401, detail="Missing bearer token")
     with connect() as conn:
         row = conn.execute(
-            "SELECT username FROM sessions WHERE token = ? AND expires_at > ?",
+            "SELECT username FROM sessions WHERE token = %s AND expires_at > %s",
             (token, now_iso()),
         ).fetchone()
     if not row:
@@ -201,7 +202,7 @@ def _issue_session(conn, username: str) -> str:
     token = issue_token()
     expires = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
     conn.execute(
-        "INSERT INTO sessions (token, username, created_at, expires_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO sessions (token, username, created_at, expires_at) VALUES (%s, %s, %s, %s)",
         (token, username, now_iso(), expires),
     )
     return token
@@ -210,7 +211,7 @@ def _issue_session(conn, username: str) -> str:
 def _notify_db(conn, username: str, ntype: str, actor: str, post_id: Optional[int] = None, text: Optional[str] = None) -> None:
     conn.execute(
         "INSERT INTO notifications (username, type, actor, post_id, text, read, created_at) "
-        "VALUES (?, ?, ?, ?, ?, 0, ?)",
+        " VALUES (%s, %s, %s, %s, %s, 0, %s)",
         (username, ntype, actor, post_id, text, now_iso()),
     )
 
@@ -219,7 +220,7 @@ def init_db() -> None:
     with connect() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
                 email TEXT NOT NULL UNIQUE,
                 password_salt TEXT NOT NULL,
@@ -236,7 +237,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS posts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 username TEXT NOT NULL,
                 text TEXT NOT NULL,
                 picture TEXT,
@@ -246,7 +247,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS comments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 post_id INTEGER NOT NULL,
                 username TEXT NOT NULL,
                 text TEXT NOT NULL,
@@ -255,7 +256,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS friend_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 from_user TEXT NOT NULL,
                 to_user TEXT NOT NULL,
                 status TEXT DEFAULT 'pending',
@@ -264,7 +265,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS friends (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 user_a TEXT NOT NULL,
                 user_b TEXT NOT NULL,
                 created_at TEXT NOT NULL,
@@ -272,7 +273,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 from_user TEXT NOT NULL,
                 to_user TEXT NOT NULL,
                 text TEXT NOT NULL,
@@ -281,7 +282,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS notifications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 username TEXT NOT NULL,
                 type TEXT NOT NULL,
                 actor TEXT NOT NULL,
@@ -292,7 +293,7 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS message_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 from_user TEXT NOT NULL,
                 to_user TEXT NOT NULL,
                 text TEXT NOT NULL,
@@ -344,14 +345,15 @@ def register(payload: RegisterRequest) -> dict:
     with connect() as conn:
         try:
             cursor = conn.execute(
-                "INSERT INTO users (username, email, password_salt, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO users (username, email, password_salt, password_hash, created_at) VALUES (%s, %s, %s, %s, %s) RETURNING id",
                 (username, email, salt, hash_password(payload.password, salt), now_iso()),
             )
+            new_id = cursor.fetchone()["id"]
             token = _issue_session(conn, username)
             conn.commit()
-        except sqlite3.IntegrityError:
+        except psycopg2.errors.UniqueViolation:
             raise HTTPException(status_code=409, detail="Username or email already exists")
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE id = %s", (new_id,)).fetchone()
     result = _public_user(row)
     result["token"] = token
     return result
@@ -362,7 +364,7 @@ def login(payload: LoginRequest) -> dict:
     key = payload.username_or_email.strip()
     with connect() as conn:
         row = conn.execute(
-            "SELECT * FROM users WHERE username = ? OR email = ?",
+            "SELECT * FROM users WHERE username = %s OR email = %s",
             (key, key.lower()),
         ).fetchone()
     if not row:
@@ -381,7 +383,7 @@ def login(payload: LoginRequest) -> dict:
 def logout(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         conn.execute(
-            "DELETE FROM sessions WHERE username = ?",
+            "DELETE FROM sessions WHERE username = %s",
             (author,),
         )
         conn.commit()
@@ -391,7 +393,7 @@ def logout(author: str = Depends(get_author)) -> dict:
 @app.get("/api/me")
 def me(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
-        row = conn.execute("SELECT * FROM users WHERE username = ?", (author,)).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE username = %s", (author,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="User not found")
     user = _public_user(row)
@@ -429,11 +431,11 @@ def _serialize_notification(row) -> dict:
 def get_notifications(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM notifications WHERE username = ? ORDER BY id DESC LIMIT 50",
+            "SELECT * FROM notifications WHERE username = %s ORDER BY id DESC LIMIT 50",
             (author,),
         ).fetchall()
         unread = conn.execute(
-            "SELECT COUNT(*) AS c FROM notifications WHERE username = ? AND read = 0",
+            "SELECT COUNT(*) AS c FROM notifications WHERE username = %s AND read = 0",
             (author,),
         ).fetchone()
     return {
@@ -445,7 +447,7 @@ def get_notifications(author: str = Depends(get_author)) -> dict:
 @app.post("/api/notifications/read")
 def mark_notifications_read(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
-        conn.execute("UPDATE notifications SET read = 1 WHERE username = ?", (author,))
+        conn.execute("UPDATE notifications SET read = 1 WHERE username = %s", (author,))
         conn.commit()
     return {"status": "success"}
 
@@ -460,7 +462,7 @@ def search_users(q: str = "", author: str = Depends(get_author)) -> List[dict]:
         if q.strip():
             like = f"%{q.strip()}%"
             rows = conn.execute(
-                "SELECT * FROM users WHERE username LIKE ? OR email LIKE ? ORDER BY username LIMIT 20",
+                "SELECT * FROM users WHERE username LIKE %s OR email LIKE %s ORDER BY username LIMIT 20",
                 (like, like),
             ).fetchall()
         else:
@@ -495,7 +497,7 @@ def suggest_friends(author: str = Depends(get_author)) -> List[dict]:
         pending_in = set(_incoming_requests(conn, author))
         pending_out = set(_sent_requests(conn, author))
         rows = conn.execute(
-            "SELECT * FROM users WHERE username != ? ORDER BY created_at DESC LIMIT 30",
+            "SELECT * FROM users WHERE username != %s ORDER BY created_at DESC LIMIT 30",
             (author,),
         ).fetchall()
         result = []
@@ -517,7 +519,7 @@ def suggest_friends(author: str = Depends(get_author)) -> List[dict]:
 @app.get("/api/users/{username}")
 def get_user(username: str) -> dict:
     with connect() as conn:
-        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE username = %s", (username,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="User not found")
         user = _public_user(row)
@@ -532,7 +534,7 @@ def get_user(username: str) -> dict:
 
 def _serialize_post(row, conn) -> dict:
     comments = conn.execute(
-        "SELECT * FROM comments WHERE post_id = ? ORDER BY id ASC", (row["id"],)
+        "SELECT * FROM comments WHERE post_id = %s ORDER BY id ASC", (row["id"],)
     ).fetchall()
     return {
         "id": row["id"],
@@ -557,7 +559,7 @@ def get_posts() -> List[dict]:
 def get_user_posts(username: str) -> List[dict]:
     with connect() as conn:
         posts = conn.execute(
-            "SELECT * FROM posts WHERE username = ? ORDER BY id DESC", (username,)
+            "SELECT * FROM posts WHERE username = %s ORDER BY id DESC", (username,)
         ).fetchall()
         return [_serialize_post(p, conn) for p in posts]
 
@@ -568,23 +570,24 @@ def create_post(payload: PostCreate, author: str = Depends(get_author)) -> dict:
         raise HTTPException(status_code=400, detail="Post text cannot be empty")
     with connect() as conn:
         cursor = conn.execute(
-            "INSERT INTO posts (username, text, picture, category, likes, created_at) VALUES (?, ?, ?, ?, 0, ?)",
+            "INSERT INTO posts (username, text, picture, category, likes, created_at) VALUES (%s, %s, %s, %s, 0, %s) RETURNING id",
             (author, payload.text.strip(), payload.picture, payload.category, now_iso()),
         )
+        post_id = cursor.fetchone()["id"]
         conn.commit()
-        row = conn.execute("SELECT * FROM posts WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        row = conn.execute("SELECT * FROM posts WHERE id = %s", (post_id,)).fetchone()
         return _serialize_post(row, conn)
 
 
 @app.delete("/api/posts/{post_id}", status_code=200)
 def delete_post(post_id: int, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
-        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+        row = conn.execute("SELECT * FROM posts WHERE id = %s", (post_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Post not found")
         if row["username"] != author:
             raise HTTPException(status_code=403, detail="You can only delete your own posts")
-        conn.execute("DELETE FROM posts WHERE id = ?", (post_id,))
+        conn.execute("DELETE FROM posts WHERE id = %s", (post_id,))
         conn.commit()
     return {"status": "success", "id": post_id}
 
@@ -592,15 +595,15 @@ def delete_post(post_id: int, author: str = Depends(get_author)) -> dict:
 @app.post("/api/posts/{post_id}/like")
 async def like_post(post_id: int, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
-        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+        row = conn.execute("SELECT * FROM posts WHERE id = %s", (post_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Post not found")
-        conn.execute("UPDATE posts SET likes = likes + 1 WHERE id = ?", (post_id,))
+        conn.execute("UPDATE posts SET likes = likes + 1 WHERE id = %s", (post_id,))
         if row["username"] != author:
             _notify_db(conn, row["username"], "like", author, post_id=post_id)
         conn.commit()
         post_owner = row["username"]
-        updated = conn.execute("SELECT likes FROM posts WHERE id = ?", (post_id,)).fetchone()
+        updated = conn.execute("SELECT likes FROM posts WHERE id = %s", (post_id,)).fetchone()
     if post_owner != author:
         await manager.notify(post_owner, {"type": "like", "actor": author, "post_id": post_id})
     return {"status": "success", "id": post_id, "likes": updated["likes"]}
@@ -611,17 +614,18 @@ async def add_comment(post_id: int, payload: CommentCreate, author: str = Depend
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Comment cannot be empty")
     with connect() as conn:
-        row = conn.execute("SELECT * FROM posts WHERE id = ?", (post_id,)).fetchone()
+        row = conn.execute("SELECT * FROM posts WHERE id = %s", (post_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Post not found")
         cursor = conn.execute(
-            "INSERT INTO comments (post_id, username, text, created_at) VALUES (?, ?, ?, ?)",
+            "INSERT INTO comments (post_id, username, text, created_at) VALUES (%s, %s, %s, %s) RETURNING id",
             (post_id, author, payload.text.strip(), now_iso()),
         )
+        comment_id = cursor.fetchone()["id"]
         if row["username"] != author:
             _notify_db(conn, row["username"], "comment", author, post_id=post_id, text=payload.text.strip())
         conn.commit()
-        comment = conn.execute("SELECT * FROM comments WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        comment = conn.execute("SELECT * FROM comments WHERE id = %s", (comment_id,)).fetchone()
         post_owner = row["username"]
     if post_owner != author:
         await manager.notify(post_owner, {"type": "comment", "actor": author, "post_id": post_id})
@@ -633,13 +637,13 @@ async def add_comment(post_id: int, payload: CommentCreate, author: str = Depend
 # ---------------------------------------------------------------------------
 
 def _post_count(conn, username: str) -> int:
-    row = conn.execute("SELECT COUNT(*) AS c FROM posts WHERE username = ?", (username,)).fetchone()
+    row = conn.execute("SELECT COUNT(*) AS c FROM posts WHERE username = %s", (username,)).fetchone()
     return row["c"] if row else 0
 
 
 def _friend_names(conn, username: str) -> List[str]:
     rows = conn.execute(
-        "SELECT user_a, user_b FROM friends WHERE user_a = ? OR user_b = ?",
+        "SELECT user_a, user_b FROM friends WHERE user_a = %s OR user_b = %s",
         (username, username),
     ).fetchall()
     names = set()
@@ -650,7 +654,7 @@ def _friend_names(conn, username: str) -> List[str]:
 
 def _incoming_requests(conn, username: str) -> List[str]:
     rows = conn.execute(
-        "SELECT from_user FROM friend_requests WHERE to_user = ? AND status = 'pending'",
+        "SELECT from_user FROM friend_requests WHERE to_user = %s AND status = 'pending'",
         (username,),
     ).fetchall()
     return [r["from_user"] for r in rows]
@@ -658,7 +662,7 @@ def _incoming_requests(conn, username: str) -> List[str]:
 
 def _sent_requests(conn, username: str) -> List[str]:
     rows = conn.execute(
-        "SELECT to_user FROM friend_requests WHERE from_user = ? AND status = 'pending'",
+        "SELECT to_user FROM friend_requests WHERE from_user = %s AND status = 'pending'",
         (username,),
     ).fetchall()
     return [r["to_user"] for r in rows]
@@ -692,7 +696,7 @@ async def send_friend_request(payload: FriendRequestCreate, author: str = Depend
     with connect() as conn:
         # Are they already friends?
         friend_rows = conn.execute(
-            "SELECT id FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+            "SELECT id FROM friends WHERE (user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s)",
             (author, to_user, to_user, author),
         ).fetchall()
         if friend_rows:
@@ -700,17 +704,17 @@ async def send_friend_request(payload: FriendRequestCreate, author: str = Depend
         # Existing pending request either direction?
         dup = conn.execute(
             "SELECT id FROM friend_requests WHERE "
-            "(from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?)",
+            "(from_user = %s AND to_user = %s) OR (from_user = %s AND to_user = %s)",
             (author, to_user, to_user, author),
         ).fetchall()
         if dup:
             raise HTTPException(status_code=409, detail="Friend request already pending")
         # Target must be a real user
-        target = conn.execute("SELECT id FROM users WHERE username = ?", (to_user,)).fetchone()
+        target = conn.execute("SELECT id FROM users WHERE username = %s", (to_user,)).fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
         conn.execute(
-            "INSERT INTO friend_requests (from_user, to_user, status, created_at) VALUES (?, ?, 'pending', ?)",
+            "INSERT INTO friend_requests (from_user, to_user, status, created_at) VALUES (%s, %s, 'pending', %s)",
             (author, to_user, now_iso()),
         )
         _notify_db(conn, to_user, "friend_request", author)
@@ -723,29 +727,29 @@ async def send_friend_request(payload: FriendRequestCreate, author: str = Depend
 async def respond_friend_request(payload: FriendRespond, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute(
-            "SELECT * FROM friend_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            "SELECT * FROM friend_requests WHERE from_user = %s AND to_user = %s AND status = 'pending'",
             (payload.from_user, author),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Request not found")
         if payload.accept:
             conn.execute(
-                "INSERT OR IGNORE INTO friends (user_a, user_b, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO friends (user_a, user_b, created_at) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
                 (min(payload.from_user, author), max(payload.from_user, author), now_iso()),
             )
             conn.execute(
-                "UPDATE friend_requests SET status = 'accepted' WHERE id = ?", (row["id"],)
+                "UPDATE friend_requests SET status = 'accepted' WHERE id = %s", (row["id"],)
             )
             _notify_db(conn, payload.from_user, "friend_accept", author)
             conn.commit()
             # Mark the friend_request notification as read and update it
             conn.execute(
-                "UPDATE notifications SET read = 1, type = 'friend_accept', text = ? WHERE username = ? AND type = 'friend_request' AND actor = ?",
+                "UPDATE notifications SET read = 1, type = 'friend_accept', text = %s WHERE username = %s AND type = 'friend_request' AND actor = %s",
                 (f"You are now friends with {author}", payload.from_user, author),
             )
             conn.commit()
         else:
-            conn.execute("DELETE FROM friend_requests WHERE id = ?", (row["id"],))
+            conn.execute("DELETE FROM friend_requests WHERE id = %s", (row["id"],))
             conn.commit()
     if payload.accept:
         await manager.notify(payload.from_user, {"type": "friend_accept", "actor": author})
@@ -757,11 +761,11 @@ def remove_friend(payload: FriendRequestCreate, author: str = Depends(get_author
     other = payload.to_user.strip()
     with connect() as conn:
         conn.execute(
-            "DELETE FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+            "DELETE FROM friends WHERE (user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s)",
             (author, other, other, author),
         )
         conn.execute(
-            "DELETE FROM friend_requests WHERE (from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?)",
+            "DELETE FROM friend_requests WHERE (from_user = %s AND to_user = %s) OR (from_user = %s AND to_user = %s)",
             (author, other, other, author),
         )
         conn.commit()
@@ -787,7 +791,7 @@ def _serialize_message(row) -> dict:
 def get_conversations(author: str = Depends(get_author)) -> List[dict]:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM messages WHERE from_user = ? OR to_user = ? ORDER BY id ASC",
+            "SELECT * FROM messages WHERE from_user = %s OR to_user = %s ORDER BY id ASC",
             (author, author),
         ).fetchall()
         threads = {}
@@ -802,7 +806,7 @@ def get_conversations(author: str = Depends(get_author)) -> List[dict]:
             unread = sum(1 for m in msgs if m["to_user"] == author and not m["read"])
             is_friend = bool(
                 conn.execute(
-                    "SELECT id FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+                    "SELECT id FROM friends WHERE (user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s)",
                     (author, other, other, author),
                 ).fetchone()
             )
@@ -822,16 +826,16 @@ async def get_thread(other_user: str, author: str = Depends(get_author)) -> dict
     with connect() as conn:
         # Mark messages to author as read
         conn.execute(
-            "UPDATE messages SET read = 1 WHERE from_user = ? AND to_user = ?",
+            "UPDATE messages SET read = 1 WHERE from_user = %s AND to_user = %s",
             (other_user, author),
         )
         conn.commit()
         rows = conn.execute(
             "SELECT * FROM messages WHERE "
-            "(from_user = ? AND to_user = ?) OR (from_user = ? AND to_user = ?) ORDER BY id ASC",
+            "(from_user = %s AND to_user = %s) OR (from_user = %s AND to_user = %s) ORDER BY id ASC",
             (author, other_user, other_user, author),
         ).fetchall()
-        other = conn.execute("SELECT * FROM users WHERE username = ?", (other_user,)).fetchone()
+        other = conn.execute("SELECT * FROM users WHERE username = %s", (other_user,)).fetchone()
         other_profile = {
             "username": other["username"] if other else other_user,
             "bio": other["bio"] if other else "",
@@ -847,33 +851,35 @@ async def send_message(other_user: str, payload: MessageCreate, author: str = De
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
     with connect() as conn:
-        target = conn.execute("SELECT id FROM users WHERE username = ?", (other_user,)).fetchone()
+        target = conn.execute("SELECT id FROM users WHERE username = %s", (other_user,)).fetchone()
         if not target:
             raise HTTPException(status_code=404, detail="User not found")
         # Check if they are friends
         is_friend = conn.execute(
-            "SELECT id FROM friends WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
+            "SELECT id FROM friends WHERE (user_a = %s AND user_b = %s) OR (user_a = %s AND user_b = %s)",
             (author, other_user, other_user, author),
         ).fetchone()
 
         if is_friend:
             # Direct message (existing behavior)
             cursor = conn.execute(
-                "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (?, ?, ?, 0, ?)",
+                "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (%s, %s, %s, 0, %s) RETURNING id",
                 (author, other_user, payload.text.strip(), now_iso()),
             )
+            msg_id = cursor.fetchone()["id"]
             conn.commit()
-            row = conn.execute("SELECT * FROM messages WHERE id = ?", (cursor.lastrowid,)).fetchone()
+            row = conn.execute("SELECT * FROM messages WHERE id = %s", (msg_id,)).fetchone()
         else:
             # Non-friend: store as message request
             cursor = conn.execute(
-                "INSERT INTO message_requests (from_user, to_user, text, status, created_at) VALUES (?, ?, ?, 'pending', ?)",
+                "INSERT INTO message_requests (from_user, to_user, text, status, created_at) VALUES (%s, %s, %s, 'pending', %s) RETURNING id",
                 (author, other_user, payload.text.strip(), now_iso()),
             )
+            req_id = cursor.fetchone()["id"]
             conn.commit()
             # Return a pseudo-message response
             return {
-                "id": cursor.lastrowid,
+                "id": req_id,
                 "from_user": author,
                 "to_user": other_user,
                 "text": payload.text.strip(),
@@ -895,7 +901,7 @@ async def send_message(other_user: str, payload: MessageCreate, author: str = De
 def get_message_requests(author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM message_requests WHERE to_user = ? AND status = 'pending' ORDER BY id ASC",
+            "SELECT * FROM message_requests WHERE to_user = %s AND status = 'pending' ORDER BY id ASC",
             (author,),
         ).fetchall()
         # Group by sender
@@ -916,7 +922,7 @@ def get_message_requests(author: str = Depends(get_author)) -> dict:
 async def accept_message_request(request_id: int, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute(
-            "SELECT * FROM message_requests WHERE id = ? AND to_user = ? AND status = 'pending'",
+            "SELECT * FROM message_requests WHERE id = %s AND to_user = %s AND status = 'pending'",
             (request_id, author),
         ).fetchone()
         if not row:
@@ -924,16 +930,16 @@ async def accept_message_request(request_id: int, author: str = Depends(get_auth
         sender = row["from_user"]
         # Migrate all pending messages from this sender to messages table
         pending = conn.execute(
-            "SELECT * FROM message_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            "SELECT * FROM message_requests WHERE from_user = %s AND to_user = %s AND status = 'pending'",
             (sender, author),
         ).fetchall()
         for msg in pending:
             conn.execute(
-                "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (?, ?, ?, 1, ?)",
+                "INSERT INTO messages (from_user, to_user, text, read, created_at) VALUES (%s, %s, %s, 1, %s)",
                 (sender, author, msg["text"], msg["created_at"]),
             )
         conn.execute(
-            "UPDATE message_requests SET status = 'accepted' WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            "UPDATE message_requests SET status = 'accepted' WHERE from_user = %s AND to_user = %s AND status = 'pending'",
             (sender, author),
         )
         conn.commit()
@@ -944,14 +950,14 @@ async def accept_message_request(request_id: int, author: str = Depends(get_auth
 async def decline_message_request(request_id: int, author: str = Depends(get_author)) -> dict:
     with connect() as conn:
         row = conn.execute(
-            "SELECT * FROM message_requests WHERE id = ? AND to_user = ? AND status = 'pending'",
+            "SELECT * FROM message_requests WHERE id = %s AND to_user = %s AND status = 'pending'",
             (request_id, author),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Request not found")
         sender = row["from_user"]
         conn.execute(
-            "DELETE FROM message_requests WHERE from_user = ? AND to_user = ? AND status = 'pending'",
+            "DELETE FROM message_requests WHERE from_user = %s AND to_user = %s AND status = 'pending'",
             (sender, author),
         )
         conn.commit()
