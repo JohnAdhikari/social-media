@@ -563,6 +563,10 @@ def me(author: str = Depends(get_author)) -> dict:
 
 @app.put("/api/me")
 def update_profile(payload: ProfileUpdate, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        me = conn.execute("SELECT is_demo FROM users WHERE username = %s", (author,)).fetchone()
+        if me and me["is_demo"]:
+            raise HTTPException(status_code=403, detail="Demo account profile is read-only")
     sets = []
     params = []
     fields = payload.model_fields_set
@@ -1119,6 +1123,10 @@ async def get_thread(other_user: str, author: str = Depends(get_author)) -> dict
 async def send_message(other_user: str, payload: MessageCreate, author: str = Depends(get_author)) -> dict:
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Message cannot be empty")
+    with connect() as conn:
+        me = conn.execute("SELECT is_demo FROM users WHERE username = %s", (author,)).fetchone()
+        if me and me["is_demo"]:
+            raise HTTPException(status_code=403, detail="Demo account cannot send messages")
     with connect() as conn:
         target = conn.execute("SELECT id FROM users WHERE username = %s", (other_user,)).fetchone()
         if not target:
