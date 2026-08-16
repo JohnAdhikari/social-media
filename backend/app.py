@@ -13,9 +13,18 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
-import psycopg2
-import psycopg2.errors
-from psycopg2.extras import RealDictCursor
+import sqlite3
+
+try:
+    import psycopg2
+    import psycopg2.errors
+    from psycopg2.extras import RealDictCursor
+    _UNIQUE_EXC = psycopg2.errors.UniqueViolation
+    _HAVE_POSTGRES = True
+except ImportError:
+    psycopg2 = None
+    _UNIQUE_EXC = sqlite3.IntegrityError
+    _HAVE_POSTGRES = False
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -154,7 +163,7 @@ class LoginRequest(BaseModel):
 
 class PostCreate(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
-    picture: Optional[str] = Field(default=None, max_length=2048)
+    picture: Optional[str] = Field(default=None, max_length=1200000)
     category: str = Field(default="General", max_length=50)
 
 class CommentCreate(BaseModel):
@@ -181,11 +190,72 @@ class ProfileUpdate(BaseModel):
 # ---------------------------------------------------------------------------
 
 def connect():
-    """Open a Postgres connection with a sqlite3-like .execute() interface."""
+    """Open a database connection with a sqlite3-like .execute() interface.
+
+    Uses Postgres when DATABASE_URL is set, otherwise falls back to a local
+    SQLite file (backend/data/social.db) so the app can run fully offline.
+    """
     url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        raise RuntimeError("DATABASE_URL is not set - configure it in the Render env vars")
-    return PgConnection(url)
+    if url:
+        if not _HAVE_POSTGRES:
+            raise RuntimeError("DATABASE_URL is set but psycopg2 is not installed")
+        return PgConnection(url)
+    return SqliteConnection()
+
+
+class SqliteConnection:
+    """SQLite fallback that mirrors the PgConnection / sqlite3 Connection API.
+
+    Translates psycopg2-style ``%s`` placeholders to SQLite's ``?`` and rewrites
+    a few Postgres-only schema keywords so the same SQL runs on both engines.
+    """
+
+    def __init__(self, path: str | None = None):
+        self._path = Path(path) if path else BASE_DIR / "data" / "social.db"
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self._path))
+        self._conn.row_factory = sqlite3.Row
+
+    @staticmethod
+    def _translate(sql: str) -> str:
+        return sql.replace("%s", "?")
+
+    @classmethod
+    def _translate_schema(cls, script: str) -> str:
+        script = script.replace("SERIAL PRIMARY KEY", "INTEGER PRIMARY KEY AUTOINCREMENT")
+        lines = [ln for ln in script.splitlines() if "ADD COLUMN IF NOT EXISTS" not in ln]
+        return cls._translate("\n".join(lines))
+
+    def execute(self, sql: str, params=None):
+        cur = self._conn.cursor()
+        cur.execute(self._translate(sql), tuple(params or ()))
+        return cur
+
+    def executescript(self, script: str) -> None:
+        cur = self._conn.cursor()
+        for stmt in self._translate_schema(script).split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                cur.execute(stmt)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            self._conn.rollback()
+        else:
+            self._conn.commit()
+        self._conn.close()
 
 
 class PgConnection:
@@ -301,11 +371,13 @@ def init_db() -> None:
                 bio TEXT DEFAULT '',
                 avatar TEXT,
                 cover TEXT,
+                is_demo INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             );
 
             ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT;
             ALTER TABLE users ADD COLUMN IF NOT EXISTS cover TEXT;
+            ALTER TABLE users ADD COLUMN IF NOT EXISTS is_demo INTEGER DEFAULT 0;
 
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
@@ -378,6 +450,14 @@ def init_db() -> None:
                 status TEXT DEFAULT 'pending',
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS post_likes (
+                id SERIAL PRIMARY KEY,
+                post_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE (post_id, username)
+            );
         """)
         conn.commit()
 
@@ -430,7 +510,7 @@ def register(payload: RegisterRequest) -> dict:
             new_id = cursor.fetchone()["id"]
             token = _issue_session(conn, username)
             conn.commit()
-        except psycopg2.errors.UniqueViolation:
+        except _UNIQUE_EXC:
             raise HTTPException(status_code=409, detail="Username or email already exists")
         row = conn.execute("SELECT * FROM users WHERE id = %s", (new_id,)).fetchone()
     result = _public_user(row)
@@ -649,7 +729,8 @@ def get_user(username: str, author: str = Depends(get_author)) -> dict:
 # Posts
 # ---------------------------------------------------------------------------
 
-def _serialize_post(row, conn) -> dict:
+def _serialize_post(row, conn, liked_ids: set = None) -> dict:
+    liked_ids = liked_ids or set()
     comments = conn.execute(
         "SELECT * FROM comments WHERE post_id = %s ORDER BY id ASC", (row["id"],)
     ).fetchall()
@@ -661,15 +742,33 @@ def _serialize_post(row, conn) -> dict:
         "category": row["category"],
         "likes": row["likes"],
         "created_at": row["created_at"],
+        "liked": row["id"] in liked_ids,
         "comments": [dict(c) for c in comments],
     }
 
 
 @app.get("/api/posts")
-def get_posts() -> List[dict]:
+def get_posts(authorization: Optional[str] = Header(default=None)) -> List[dict]:
+    author = None
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+        if token:
+            with connect() as conn:
+                row = conn.execute(
+                    "SELECT username FROM sessions WHERE token = %s AND expires_at > %s",
+                    (token, now_iso()),
+                ).fetchone()
+                if row:
+                    author = row["username"]
     with connect() as conn:
+        liked_ids = set()
+        if author:
+            rows = conn.execute(
+                "SELECT post_id FROM post_likes WHERE username = %s", (author,)
+            ).fetchall()
+            liked_ids = {r["post_id"] for r in rows}
         posts = conn.execute("SELECT * FROM posts ORDER BY id DESC").fetchall()
-        return [_serialize_post(p, conn) for p in posts]
+        return [_serialize_post(p, conn, liked_ids) for p in posts]
 
 
 @app.get("/api/users/{username}/posts")
@@ -686,6 +785,21 @@ def create_post(payload: PostCreate, author: str = Depends(get_author)) -> dict:
     if not payload.text.strip():
         raise HTTPException(status_code=400, detail="Post text cannot be empty")
     with connect() as conn:
+        me = conn.execute(
+            "SELECT is_demo FROM users WHERE username = %s", (author,)
+        ).fetchone()
+        if me and me["is_demo"]:
+            return {
+                "id": f"demo-{secrets.token_hex(4)}",
+                "username": author,
+                "text": payload.text.strip(),
+                "picture": payload.picture,
+                "category": payload.category,
+                "likes": 0,
+                "liked": False,
+                "created_at": now_iso(),
+                "comments": [],
+            }
         cursor = conn.execute(
             "INSERT INTO posts (username, text, picture, category, likes, created_at) VALUES (%s, %s, %s, %s, 0, %s) RETURNING id",
             (author, payload.text.strip(), payload.picture, payload.category, now_iso()),
@@ -715,15 +829,32 @@ async def like_post(post_id: int, author: str = Depends(get_author)) -> dict:
         row = conn.execute("SELECT * FROM posts WHERE id = %s", (post_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Post not found")
-        conn.execute("UPDATE posts SET likes = likes + 1 WHERE id = %s", (post_id,))
-        if row["username"] != author:
-            _notify_db(conn, row["username"], "like", author, post_id=post_id)
+        existing = conn.execute(
+            "SELECT id FROM post_likes WHERE post_id = %s AND username = %s",
+            (post_id, author),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "DELETE FROM post_likes WHERE post_id = %s AND username = %s",
+                (post_id, author),
+            )
+            conn.execute("UPDATE posts SET likes = likes - 1 WHERE id = %s", (post_id,))
+            liked = False
+        else:
+            conn.execute(
+                "INSERT INTO post_likes (post_id, username, created_at) VALUES (%s, %s, %s)",
+                (post_id, author, now_iso()),
+            )
+            conn.execute("UPDATE posts SET likes = likes + 1 WHERE id = %s", (post_id,))
+            liked = True
+            if row["username"] != author:
+                _notify_db(conn, row["username"], "like", author, post_id=post_id)
         conn.commit()
         post_owner = row["username"]
         updated = conn.execute("SELECT likes FROM posts WHERE id = %s", (post_id,)).fetchone()
-    if post_owner != author:
+    if post_owner != author and liked:
         await manager.notify(post_owner, {"type": "like", "actor": author, "post_id": post_id})
-    return {"status": "success", "id": post_id, "likes": updated["likes"]}
+    return {"status": "success", "id": post_id, "likes": updated["likes"], "liked": liked}
 
 
 @app.post("/api/posts/{post_id}/comments", status_code=201)

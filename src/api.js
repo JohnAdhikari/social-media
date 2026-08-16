@@ -25,7 +25,11 @@ async function request(path, options = {}) {
     let detail = "Request failed";
     try {
       const data = await res.json();
-      detail = data.detail || detail;
+      if (Array.isArray(data.detail)) {
+        detail = data.detail.map((d) => d.msg || JSON.stringify(d)).join("; ");
+      } else {
+        detail = data.detail || detail;
+      }
     } catch {
       /* ignore parse errors */
     }

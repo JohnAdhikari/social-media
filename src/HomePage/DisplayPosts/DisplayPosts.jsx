@@ -5,6 +5,31 @@ import api from "../../api";
 import useGsapReveal from "../../hooks/useGsapReveal";
 import "./displayposts.css";
 
+const MAX_POST_IMAGE = 1280;
+
+function resizeImage(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read the file"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("That file is not a valid image"));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // Map a backend post to the shape the UI expects.
 function mapPost(p) {
   return {
@@ -15,7 +40,7 @@ function mapPost(p) {
     picture: p.picture,
     category: p.category,
     likes: p.likes,
-    isLiked: false,
+    isLiked: !!p.liked,
     comments: (p.comments || []).map((c) => ({
       id: c.id,
       username: c.username,
@@ -63,14 +88,14 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
     setTimeout(() => setToastMessage(""), 2500);
   }
 
-  function handleImageUpload(e) {
+  async function handleImageUpload(e) {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPicture(reader.result);
-      };
-      reader.readAsDataURL(file);
+    e.target.value = "";
+    if (!file) return;
+    try {
+      setPicture(await resizeImage(file, MAX_POST_IMAGE));
+    } catch (err) {
+      triggerToast(err.message || "Could not read image");
     }
   }
 
@@ -94,6 +119,8 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
   }
 
   async function toggleLike(postId) {
+    const target = posts.find((p) => p.id === postId);
+    if (!target) return;
     setPosts(
       posts.map((p) =>
         p.id === postId
@@ -102,9 +129,16 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
       )
     );
     try {
-      await api.likePost(postId);
+      const res = await api.likePost(postId);
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, likes: res.likes, isLiked: res.liked } : p))
+      );
     } catch {
-      /* optimistic update; sync with server on next load */
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, likes: target.likes, isLiked: target.isLiked } : p
+        )
+      );
     }
   }
 
@@ -125,6 +159,11 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
   }
 
   async function handleDeletePost(postId) {
+    if (typeof postId === "string") {
+      setPosts(posts.filter((p) => p.id !== postId));
+      triggerToast("Post removed");
+      return;
+    }
     try {
       await api.deletePost(postId);
       setPosts(posts.filter((p) => p.id !== postId));

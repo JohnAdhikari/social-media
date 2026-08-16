@@ -171,9 +171,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  color: #e2e8f0;
+  background: var(--bg-glass-hover);
+  border: 1px dashed var(--border-glass);
+  color: var(--text-main);
   padding: 12px;
   border-radius: var(--radius-full);
   font-weight: 600;
@@ -187,9 +187,9 @@
 }
 
 .demo-login-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(99, 102, 241, 0.15);
   border-color: var(--accent-primary);
-  color: #fff;
+  color: var(--text-main);
 }
 
 .divider {
