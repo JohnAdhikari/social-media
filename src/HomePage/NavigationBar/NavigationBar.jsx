@@ -12,7 +12,7 @@ import "./navigationbar.css";
 function NavigationBar({ searchQuery, setSearchQuery, activeTab, setActiveTab }) {
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [theme, setTheme] = useState(() => localStorage.getItem("zone_media_theme") || "dark");
+  const [theme, setTheme] = useState(() => localStorage.getItem("zone_media_theme") || "light");
   const [notifOpen, setNotifOpen] = useState(false);
   const { items: notifs, unread, load: reloadNotifs, markRead } = useNotifications();
   const { isOnline } = usePresence();

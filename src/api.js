@@ -61,6 +61,7 @@ export const api = {
   likePost: (id) => request(`/posts/${id}/like`, { method: "POST" }),
   addComment: (id, text) =>
     request(`/posts/${id}/comments`, { method: "POST", body: JSON.stringify({ text }) }),
+  deleteComment: (commentId) => request(`/comments/${commentId}`, { method: "DELETE" }),
 
   // Friends
   getFriends: () => request("/friends"),

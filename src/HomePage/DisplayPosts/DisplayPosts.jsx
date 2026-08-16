@@ -173,6 +173,22 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
     }
   }
 
+  async function handleDeleteComment(postId, commentId) {
+    try {
+      await api.deleteComment(commentId);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, comments: p.comments.filter((c) => c.id !== commentId) }
+            : p
+        )
+      );
+      triggerToast("Comment deleted");
+    } catch (err) {
+      triggerToast(err.message || "Could not delete comment");
+    }
+  }
+
   const filteredPosts = posts.filter((post) => {
     // Feed keeps all categories; Explore focuses on varied/non-General content
     if (activeTab === "feed") {
@@ -385,6 +401,19 @@ function DisplayPosts({ searchQuery = "", activeTab = "feed" }) {
                           <span className="comment-author">{comment.username}</span>
                           <p className="comment-text">{comment.text}</p>
                         </div>
+                        {comment.username === username && (
+                          <button
+                            className="comment-delete-btn"
+                            title="Delete comment"
+                            aria-label="Delete comment"
+                            onClick={() => handleDeleteComment(post.id, comment.id)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -880,6 +880,19 @@ async def add_comment(post_id: int, payload: CommentCreate, author: str = Depend
     return dict(comment)
 
 
+@app.delete("/api/comments/{comment_id}", status_code=200)
+def delete_comment(comment_id: int, author: str = Depends(get_author)) -> dict:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM comments WHERE id = %s", (comment_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Comment not found")
+        if row["username"] != author:
+            raise HTTPException(status_code=403, detail="You can only delete your own comments")
+        conn.execute("DELETE FROM comments WHERE id = %s", (comment_id,))
+        conn.commit()
+    return {"status": "success", "id": comment_id}
+
+
 # ---------------------------------------------------------------------------
 # Friends
 # ---------------------------------------------------------------------------

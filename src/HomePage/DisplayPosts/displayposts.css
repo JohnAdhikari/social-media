@@ -338,7 +338,26 @@
 
 .comment-item {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
+}
+
+.comment-delete-btn {
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.comment-item:hover .comment-delete-btn {
+  opacity: 1;
+}
+
+.comment-delete-btn:hover {
+  color: #ef4444;
 }
 
 .comment-avatar {
