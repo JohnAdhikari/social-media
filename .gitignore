@@ -13,6 +13,9 @@ dist-ssr
 .vite
 *.local
 
+# Recording notes (never commit)
+VIDEO_RECORDING_STEPS.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
