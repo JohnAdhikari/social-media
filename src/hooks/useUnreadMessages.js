@@ -18,7 +18,7 @@ export function useUnreadMessages() {
   useEffect(() => {
     const username = localStorage.getItem("username") || "";
     connect(username);
-    void load();
+    const initial = setTimeout(load, 0);
     const off = onRealTime((data) => {
       if (data.type === "message" || data.type === "read") load();
     });
@@ -26,6 +26,7 @@ export function useUnreadMessages() {
     window.addEventListener("zone:messages-updated", onMessagesUpdated);
     const id = setInterval(load, 20000);
     return () => {
+      clearTimeout(initial);
       off();
       clearInterval(id);
       window.removeEventListener("zone:messages-updated", onMessagesUpdated);
